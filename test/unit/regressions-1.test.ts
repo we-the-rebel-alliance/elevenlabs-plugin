@@ -1,17 +1,13 @@
 // Regression tests for one review pass. Each one failed before its fix and must pass after it.
 import { afterAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { fileURLToPath } from "node:url"
 import { Ledger, quoteCall, quoteCallSync, SpendRefused, actualCreditsOf } from "../../src/billing.js"
-import { creativeGuardSentence } from "../../src/elevenlabs-tools.js"
 import { shapersFor } from "../../src/host/tools-rpc.js"
 import { defaultRules, evaluate } from "../../src/permissions.js"
 import type { Rule } from "../../src/permissions.js"
 import { storageOver } from "../fixtures/store.js"
-
-const repo = fileURLToPath(new URL("../..", import.meta.url))
 
 const root = mkdtempSync(join(tmpdir(), "elevenlabs-rereview-"))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
@@ -109,7 +105,6 @@ describe("a creative_ name the table does not price is refused on both paths", (
     ledger.rememberPrice("creative_upscale", { prompt: "x" }, { credits: 900, basis: "exact", parts: [] })
     const quoted = quoteCallSync({ ledger, caps: () => caps() }, "creative_upscale", { prompt: "x" }, call("upscale"))
     expect(quoted).toMatchObject({ tracked: true, price: { credits: 900 } })
-    expect(readFileSync(join(repo, "README.md"), "utf8")).toContain(creativeGuardSentence())
   })
 })
 

@@ -45,7 +45,7 @@ describe("a tool that renders a view is classed as ElevenLabs marks it", () => {
   // At e07ebfc `creative_show_flow_results` was in READ_TOOLS; it was then moved to the writes because its description
   // is an effect, rendering a run's generations to the user. The live capture of 2026-11-14 records ElevenLabs' own
   // readOnlyHint, true, and it changes nothing in the workspace, so it is a read again: Jelly enforces the declared
-  // readOnly, and the declaration follows the server unless a reason is written down (docs/jelly.md).
+  // readOnly, and the declaration follows the server unless a reason is written down (READ_ONLY_OVERRIDES).
 
   test("showing a run's results is a read, like reading the same run's status", () => {
     expect(classify("creative_show_flow_results")).toBe("read")

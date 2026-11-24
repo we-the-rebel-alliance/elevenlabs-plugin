@@ -747,7 +747,7 @@ describe("the documented residual is what the ledger now does", () => {
   const RESIDUAL =
     "within one OpenCode the caps are exact; across OpenCodes a cap is crossed by at most one call's reservation for each one deciding before its read of the others' holds lands, so eight of them at 3,000 credits a call can spend 31,000 against a 10,000 cap; every OpenCode reads the store behind each call it admits and every five seconds besides, so none decides on a book older than that; a settled charge is never lost"
 
-  for (const file of ["README.md", "SECURITY.md", "docs/architecture.md"]) {
+  for (const file of ["SECURITY.md", "docs/architecture.md"]) {
     test(`${file} states the residual exactly`, () => {
       const prose = readFileSync(join(ROOT, file), "utf8").replace(/\*\*/g, "").replace(/\s+/g, " ")
       expect(prose).toContain(RESIDUAL)

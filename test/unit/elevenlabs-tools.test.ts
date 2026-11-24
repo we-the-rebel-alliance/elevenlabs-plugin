@@ -3,7 +3,6 @@ import {
   ALL_TOOLS,
   classify,
   CONVERSATION_TOOLS,
-  creativeGuardSentence,
   DESTRUCTIVE_TOOLS,
   ESTIMATE_TOOLS,
   EXPORT_TOOLS,
@@ -82,13 +81,8 @@ describe("the tool table", () => {
     expect(mustPrice("Creative_Generate_Speech")).toBe(true)
   })
 
-  test("the README sentence counts the spending tools from the predicate itself", () => {
-    expect(creativeGuardSentence()).toContain(`each of the ${ALL_TOOLS.filter(spends).length} tools that can spend`)
-    expect(creativeGuardSentence()).toContain("any name this table does not classify, whatever it starts with")
-  })
-
   test("the saved annotations agree with the classes where the fixture records them", () => {
-    // readOnly is what Jelly enforces: a read is exactly a tool ElevenLabs marks read-only, except where the table
+    // A read is exactly a tool ElevenLabs marks read-only, except where the table
     // records why it is stricter. ElevenLabs' destructiveHint also marks updates that replace a value, which are
     // writes here; every delete is destructive, and ElevenLabs marks each of them so.
     for (const tool of LIVE_TOOLS) {

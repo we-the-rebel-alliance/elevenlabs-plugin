@@ -6,7 +6,6 @@ import { describe, expect, test } from "bun:test"
 import {
   estimatePrice,
   Ledger,
-  LEDGER_KEY,
   quoteCall,
   quoteCallSync,
   RESERVATION_MS,
@@ -483,7 +482,7 @@ describe("the money gate folds case, as the permission gate does", () => {
 
   test("status names the second entry and offers to remove it, while a cap is on", () => {
     const facts = {
-      host: { version: "2.2.6", range: ">=2.2.3 <2.4.0", tested: true },
+      host: { version: "2.4.1", range: ">=2.4.1 <2.5.0", tested: true },
       server: { status: "connected" as const },
       source: { type: "plugin" as const, url: REGIONS.global },
       tools: ["creative_generate_speech"],
@@ -561,33 +560,22 @@ describe("folded credits age from when they were spent", () => {
   test("a folded total keeps its own hour through the store", async () => {
     const store = new Map<string, unknown>()
     const storage = storageOver(store)
-    store.set(LEDGER_KEY, {
-      entries: [],
-      holds: [],
-      // One bucket in hour 0, and a total written before the buckets, stamped half past hour 1.
-      rolled: [
-        { at: 0, credits: 400, sessionID: "ses_a" },
-        { at: HOUR + 30 * 60 * 1_000, credits: 200, sessionID: "ses_b" },
-      ],
-    })
+    // An hourly total in the append-only format: one writer's hour, per session. It ages from the hour it names.
+    store.set("spend/writer-a/h/0", { at: 0, sessions: { ses_a: 400, ses_b: 200 } })
     let now = 3 * HOUR
-    const ledger = new Ledger({ storage, now: () => now })
+    const ledger = new Ledger({ storage, writerId: "writer-b", now: () => now })
     await ledger.hydrate()
-    ledger.record("ses_a", 7, 3 * HOUR)
-    await ledger.flush()
-    expect(ledger.daily()).toBe(607)
-    now = 25 * HOUR + 45 * 60 * 1_000
-    // Hour 0's total has aged out. The one stamped mid-hour was read back as hour 1's bucket, so it is kept while any
-    // minute of that hour is in the window: d107a11 aged it from 01:30 and had already dropped it here. Rounding down
-    // only ever lengthens the window a stored total had, which is the side a cap must err on.
-    expect(ledger.daily()).toBe(207)
-    // A separate storage object is a separate book: this ledger starts empty and learns the buckets from the store.
-    const second = new Ledger({ storage: storageOver(store), now: () => now })
+    expect(ledger.daily()).toBe(600)
+    expect(ledger.spend("ses_b").sessionCredits).toBe(200)
+    // Kept while any minute of hour 0 is inside the window, and dropped once the hour has aged out.
+    now = 24 * HOUR + 30 * 60 * 1_000
+    expect(ledger.daily()).toBe(600)
+    now = 25 * HOUR + 1
+    expect(ledger.daily()).toBe(0)
+    // A separate storage object is a separate book: this ledger starts empty and learns the bucket from the store.
+    const second = new Ledger({ storage: storageOver(store), writerId: "writer-c", now: () => now })
     await second.hydrate()
-    expect(second.daily()).toBe(207)
-    expect(second.spend("ses_b").sessionCredits).toBe(200)
-    now = 26 * HOUR + 1
-    expect(second.daily()).toBe(7)
-    expect(second.daily()).toBe(ledger.daily())
+    expect(second.daily()).toBe(0)
+    expect(second.spend("ses_b").sessionCredits).toBe(0)
   })
 })

@@ -343,9 +343,7 @@ function parseJson(text: string): unknown {
 // most one call's reservation; a settled charge is never lost.
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The single record this plugin wrote before the ledger became append-only. Read and counted, never written again. */
-export const LEDGER_KEY = "spend.ledger"
-/** Every ledger key sits under this prefix, so one scan reads the whole book. `spend.ledger` sorts before it. */
+/** Every ledger key sits under this prefix, so one scan reads the whole book. */
 export const SPEND_PREFIX = "spend/"
 const WINDOW_MS = 24 * 60 * 60 * 1000
 /** A hold still open after this is settled at the reserved price. Ten minutes is inside a long video; expiry must not free the budget. */
@@ -390,11 +388,6 @@ interface Folded {
   bySession: Map<string, number>
 }
 
-/** What the pre-append-only record still contributes. Counted while it is in the window; never written. */
-interface Legacy {
-  rows: Array<{ at: number; credits: number; sessionID: string; hourly: boolean }>
-}
-
 interface Book {
   /** This book's name in the store. Every key it writes starts with it, and no other book writes those keys. */
   writerId: string
@@ -406,7 +399,6 @@ interface Book {
   others: Map<string, Row>
   /** The other writers' folded hours, by full key. Summed with this book's: no two writers share an hour's key. */
   otherFolded: Map<string, Folded>
-  legacy: Legacy
   chain: Promise<void>
 }
 
@@ -419,7 +411,6 @@ const emptyBook = (writerId: string): Book => ({
   folded: new Map(),
   others: new Map(),
   otherFolded: new Map(),
-  legacy: { rows: [] },
   chain: Promise.resolve(),
 })
 
@@ -540,7 +531,6 @@ export class Ledger {
       }
       book.others = others
       book.otherFolded = otherFolded
-      book.legacy = parseLegacy(await storage.get(LEDGER_KEY))
     })
   }
 
@@ -689,7 +679,6 @@ export class Ledger {
     book.folded.clear()
     book.others.clear()
     book.otherFolded.clear()
-    book.legacy = { rows: [] }
     this.remembered.clear()
   }
 
@@ -731,13 +720,6 @@ export class Ledger {
       if (folded.at + BUCKET_MS >= horizon) continue
       book.otherFolded.delete(key)
       this.store(this.removeKey(book, key))
-    }
-    if (book.legacy.rows.length > 0) {
-      const live = book.legacy.rows.filter((row) => (row.hourly ? row.at + BUCKET_MS >= horizon : row.at >= horizon))
-      if (live.length === 0) {
-        book.legacy = { rows: [] }
-        this.store(this.removeKey(book, LEDGER_KEY))
-      } else book.legacy = { rows: live }
     }
     const excess = book.own.size - MAX_ENTRIES
     if (excess <= 0) return
@@ -827,7 +809,7 @@ export class Ledger {
   }
 }
 
-/** Every live row, every live folded hour and whatever the old record still holds, added up. No figure is taken over another. */
+/** Every live row and every live folded hour, added up. No figure is taken over another. */
 function total(book: Book, sessionID: string | undefined, now: number): number {
   const horizon = now - WINDOW_MS
   const mine = (id: string) => sessionID === undefined || id === sessionID
@@ -836,10 +818,6 @@ function total(book: Book, sessionID: string | undefined, now: number): number {
   for (const row of book.others.values()) if (row.at >= horizon && mine(row.sessionID)) sum += row.credits
   for (const [hour, bySession] of book.folded) if (hour + BUCKET_MS >= horizon) sum += hourTotal(bySession, sessionID)
   for (const folded of book.otherFolded.values()) if (folded.at + BUCKET_MS >= horizon) sum += hourTotal(folded.bySession, sessionID)
-  for (const row of book.legacy.rows) {
-    const live = row.hourly ? row.at + BUCKET_MS >= horizon : row.at >= horizon
-    if (live && mine(row.sessionID)) sum += row.credits
-  }
   return sum
 }
 
@@ -866,32 +844,6 @@ function parseHour(value: unknown): Map<string, number> | undefined {
     if (typeof credits === "number" && Number.isFinite(credits)) bySession.set(sessionID, credits)
   }
   return bySession
-}
-
-/**
- * The record written before the ledger became append-only: its charges, its holds and its folded totals, read as rows
- * that still count. A total written before the hourly keys holds the newest folded charge's own time; rounding it to
- * its hour only ever lengthens the window it had, which is the side a cap must err on.
- */
-function parseLegacy(stored: unknown): Legacy {
-  const rows: Legacy["rows"] = []
-  const take = (value: unknown, hourly: boolean) => {
-    if (!Array.isArray(value)) return
-    for (const item of value) {
-      if (item === null || typeof item !== "object") continue
-      const row = item as Record<string, unknown>
-      if (typeof row.at !== "number" || typeof row.credits !== "number" || typeof row.sessionID !== "string") continue
-      rows.push({ at: hourly ? bucketOf(row.at) : row.at, credits: row.credits, sessionID: row.sessionID, hourly })
-    }
-  }
-  if (Array.isArray(stored)) take(stored, false)
-  else if (stored !== null && typeof stored === "object") {
-    const record = stored as Record<string, unknown>
-    take(record.entries, false)
-    take(record.holds, false)
-    take(record.rolled, true)
-  }
-  return { rows }
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
