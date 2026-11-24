@@ -30,6 +30,13 @@ const stages = {
   unit: () => run("bun", ["test", "./test/unit"]),
   // The source contract's conformance kit over the declared source, offline; writes reports/conformance-report.json.
   conformance: () => run("bun", ["scripts/conformance.ts"]),
+  // The copied release kit's tests. The two skipped suites assert the retired macOS push matrix ("CI: macOS on pushes")
+  // and re-run the whole file under a nested environment ("the kit tests, whatever"); the one-job CI replaces both.
+  // Every other suite runs, including the drift and Jelly kit suites this file imports.
+  kit: () =>
+    run("node", ["--test", "--test-skip-pattern", "^CI: macOS on pushes|^the kit tests, whatever", "scripts/release-kit.test.mjs"], {
+      env: { KIT_TESTS_NESTED: "1" },
+    }),
   build: () => run("node", ["scripts/build.mjs"]),
   icons: () => run("node", ["scripts/check-icons.mjs"]),
   host: host,
