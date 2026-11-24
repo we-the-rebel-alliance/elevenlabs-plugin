@@ -1,8 +1,8 @@
 {
-  "name": "@joe-broadhead/opencode-elevenlabs",
-  "version": "0.0.10",
+  "name": "@we-the-rebel-alliance/elevenlabs-plugin",
+  "version": "0.0.0",
   "private": true,
-  "description": "Unofficial OpenCode plugin for ElevenLabs: manage voice and chat agents, review their calls, and generate speech, images and video through ElevenLabs' official MCP server, with a spending guard and files saved to disk",
+  "description": "Unofficial OpenCode plugin for ElevenLabs: voice and chat agents, calls, and speech, image and video generation.",
   "keywords": [
     "opencode",
     "opencode-plugin",
@@ -12,11 +12,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/joe-broadhead/opencode-elevenlabs.git"
+    "url": "git+https://github.com/we-the-rebel-alliance/elevenlabs-plugin.git"
   },
-  "homepage": "https://github.com/joe-broadhead/opencode-elevenlabs#readme",
+  "homepage": "https://github.com/we-the-rebel-alliance/elevenlabs-plugin#readme",
   "bugs": {
-    "url": "https://github.com/joe-broadhead/opencode-elevenlabs/issues"
+    "url": "https://github.com/we-the-rebel-alliance/elevenlabs-plugin/issues"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -36,7 +36,7 @@
     "CHANGELOG.md"
   ],
   "opencode": {
-    "host": ">=2.2.3 <2.4.0",
+    "host": ">=2.4.1 <2.5.0",
     "icons": [
       {
         "src": "assets/icon.svg",
@@ -1770,14 +1770,15 @@
     "conformance": "node scripts/check.mjs conformance"
   },
   "devDependencies": {
-    "@opencode/client": "2.2.3",
-    "@opencode/plugin": "2.2.3",
-    "@opencode/sdk": "2.2.3",
+    "@opencode/client": "2.4.1",
+    "@opencode/plugin": "2.4.1",
+    "@opencode/sdk": "2.4.1",
     "@opentui/core": "0.8.0",
     "@opentui/solid": "0.8.0",
     "@types/bun": "1.4.4",
     "@types/node": "24.19.2",
     "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.3.0",
+    "effect": "4.1.0",
     "esbuild": "0.28.2",
     "solid-js": "1.9.17",
     "typescript": "5.9.3"

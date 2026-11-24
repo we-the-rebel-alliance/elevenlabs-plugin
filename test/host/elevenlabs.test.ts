@@ -87,6 +87,8 @@ describe(`the plugin's own server on OpenCode ${HOST_VERSION}`, () => {
   })
 
   test("the plugin is active, elevenlabs is connected, and its tools, skills and both commands are registered", async () => {
+    // A server with no `protocol` is discovered first, as MCP 2026-07-28 and OpenCode 2.4.1 require.
+    expect(host.fake.methods[0]).toBe("server/discover")
     const { data: plugins } = await host.client.plugin.list({ location: host.location })
     expect(plugins.find((plugin) => plugin.id === "elevenlabs")?.state.status).toBe("active")
     const { data: servers } = await host.client.mcp.list({ location: host.location })
@@ -432,6 +434,9 @@ describe("a server that asks for a sign-in", () => {
     expect(text).toContain(`- Connection: sign-in required (${host.fake.url}, registered by this plugin)`)
     expect(text).toContain(`- Next step: ${SIGN_IN}`)
     expect(host.fake.markers.length).toBeGreaterThan(0)
+    // A 401 ends the attempt: discovery was asked, and no legacy initialize followed it.
+    expect(host.fake.methods).toContain("server/discover")
+    expect(host.fake.methods).not.toContain("initialize")
   })
 })
 

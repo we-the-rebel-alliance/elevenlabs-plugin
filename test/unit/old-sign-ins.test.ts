@@ -8,7 +8,7 @@ import { findOldSignIns, registerOldSignIns, serverIntegrationID } from "../../s
 import { buildStatus, formatStatus, StatusRpc, type StatusFacts } from "../../src/status.js"
 import { READ_TOOLS } from "../../src/elevenlabs-tools.js"
 
-const host = checkHost("2.2.3", false)
+const host = checkHost("2.4.1", false)
 const base: StatusFacts = { server: { status: "connected" }, source: { type: "plugin", url: ENDPOINT }, host, tools: [READ_TOOLS[0]!], spend: { dailyCredits: 0, sessionCap: null, dailyCap: null } }
 const row = (facts: StatusFacts, label: string) => formatStatus(buildStatus(facts)).split("\n").find((line) => line.startsWith(`- ${label}:`)) ?? ""
 

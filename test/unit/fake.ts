@@ -37,7 +37,7 @@ export function mcpEditor(initial: Record<string, ServerConfig> = {}) {
 
 export type FakeAgent = { id: string; permissions: Rule[] }
 
-/** Agents shaped like 2.2.3's built-ins: a base allow first, then each agent's own rules. */
+/** Agents shaped like OpenCode 2.4.1's built-ins: a base allow first, then each agent's own rules. */
 export const builtInAgents = (): FakeAgent[] => [
   { id: "build", permissions: [allow("*"), { action: "read", resource: "*.env", effect: "ask" }] },
   { id: "plan", permissions: [allow("*"), { action: "read", resource: "*.env", effect: "ask" }, { action: "edit", resource: "*", effect: "deny" }] },
@@ -70,7 +70,7 @@ export type FakeTool = { id: string; execute: (input: unknown, context: unknown)
  * list `ctx.tool.list()` answers with, and is mutable: a test that needs the spending guard to reach ElevenLabs' own
  * estimate pushes an executor for the tool it is pricing.
  */
-export function pluginContext(options: unknown, version = "2.2.3") {
+export function pluginContext(options: unknown, version = "2.4.1") {
   const mcp = transforms<McpEditor>()
   const agent = transforms<Parameters<Parameters<Plugin.Context["agent"]["transform"]>[0]>[0]>()
   const skill = transforms<Parameters<Parameters<Plugin.Context["skill"]["transform"]>[0]>[0]>()

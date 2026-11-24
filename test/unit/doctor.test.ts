@@ -66,7 +66,7 @@ const facts = (overrides: Partial<DoctorFacts> = {}): DoctorFacts => ({
   conversations: "full",
   mediaRoot: "~/Downloads/elevenlabs",
   maxMediaBytes: 1024,
-  host: checkHost("2.2.3", false),
+  host: checkHost("2.4.1", false),
   spend: { dailyCredits: 1200, sessionCap: 2000, dailyCap: 10000 },
   skills: [
     { name: "elevenlabs", path: "/pkg/skills/elevenlabs/SKILL.md" },

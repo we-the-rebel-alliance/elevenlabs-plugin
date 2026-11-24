@@ -69,10 +69,9 @@ describe("call examples", () => {
 
   test.each(SKILLS)("%s names in backticks only tools, parameters and fields the plugin knows", (file) => {
     const known = new Set([...LIVE.keys(), ...[...LIVE.values()].flatMap((tool) => tool.params)])
-    // The plugin's own tool, the fields its result carries, the two argument shorthands the skills use, a nested rule
-    // field, and the one tool the skills name that belongs to a host rather than to ElevenLabs: Jelly's sign-in request.
+    // The plugin's own tool, the fields its result carries, the two argument shorthands the skills use, and a nested
+    // rule field.
     const others = new Set([
-      "jelly_connection_request",
       "save_media", "elevenlabs_save_media", "duration_seconds", "sha256", "flow_id", "node_id", "session_ids",
       "connect_from", "voice_id", "model_id", "first_message", "agent_id", "conversation_id", "branch_id", "prompt",
       "estimate_only", "generations_count", "cost_fiat", "mediaRoot", "text_to_speech", "speech_history_read",
