@@ -1,17 +1,13 @@
 // Regression tests for one review pass. Each one failed before its fix and must pass after it.
 import { afterAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { fileURLToPath } from "node:url"
-import { Ledger, quoteCall, quoteCallSync, SpendRefused, actualCreditsOf } from "../../src/billing.js"
-import { creativeGuardSentence } from "../../src/elevenlabs-tools.js"
+import { Ledger, quoteCallSync, SpendRefused, actualCreditsOf } from "../../src/billing.js"
 import { shapersFor } from "../../src/host/tools-rpc.js"
 import { defaultRules, evaluate } from "../../src/permissions.js"
 import type { Rule } from "../../src/permissions.js"
 import { storageOver } from "../fixtures/store.js"
-
-const repo = fileURLToPath(new URL("../..", import.meta.url))
 
 const root = mkdtempSync(join(tmpdir(), "elevenlabs-rereview-"))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
@@ -43,7 +39,7 @@ describe("a caller-typed number cannot set a price at all", () => {
   test("a duration, a byte count or a path prices nothing, and none of them is sent", async () => {
     for (const args of [{ duration_seconds: 0 }, { duration_seconds: 1, size_bytes: 50_000_000 }, { path: join(root, "clip.wav") }]) {
       const ledger = new Ledger()
-      await expect(quoteCall({ ledger, caps: () => caps(100_000, 100_000) }, "creative_transcribe_audio", args, call("t"))).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
+      expect(() => quoteCallSync({ ledger, caps: () => caps(100_000, 100_000) }, "creative_transcribe_audio", args, call("t"))).toThrow("PRICE_UNKNOWN")
       expect(ledger.daily()).toBe(0)
       expect(() => shapersFor({ ledger: new Ledger(), caps: () => caps() }).input("creative_transcribe_audio", args, shape("ses_z", "elevenlabs_creative_transcribe_audio"))).toThrow("PRICE_UNKNOWN")
     }
@@ -55,14 +51,13 @@ describe("a caller-typed number cannot set a price at all", () => {
     const minute = join(root, "minute.wav")
     writeFileSync(minute, wavHeader(60))
     const ledger = new Ledger()
-    await expect(quoteCall({ ledger, caps: () => caps(10_000, 10_000) }, "creative_transcribe_audio", { path: minute }, call("wav"))).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
+    expect(() => quoteCallSync({ ledger, caps: () => caps(10_000, 10_000) }, "creative_transcribe_audio", { path: minute }, call("wav"))).toThrow("PRICE_UNKNOWN")
     expect(ledger.daily()).toBe(0)
   })
 
-  test("a generation count that is not a number stops the call, since it multiplies whatever one costs", async () => {
+  test("a generation count that is not a number stops the call, since it multiplies whatever one costs", () => {
     const ledger = new Ledger()
-    const estimate = async () => ({ credits: 300, basis: "exact" as const, parts: [] })
-    await expect(quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_image", { prompt: "x", generations_count: "lots" }, call("n"))).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
+    expect(() => quoteCallSync({ ledger, caps: () => caps() }, "creative_generate_image", { prompt: "x", generations_count: "lots" }, call("n"))).toThrow("PRICE_UNKNOWN")
     expect(ledger.daily()).toBe(0)
   })
 })
@@ -90,15 +85,10 @@ function wavHeader(seconds: number, byteRate = 16_000) {
 describe("a creative_ name the table does not price is refused on both paths", () => {
   const names = ["creative_upscale", "creative_remix", "creative_voice_clone", "creative_isolate", "creative_enhance", "creative_extend"]
 
-  test("each is PRICE_UNKNOWN before dispatch, and tracked is never false", async () => {
+  test("each is PRICE_UNKNOWN before dispatch, and tracked is never false", () => {
     for (const name of names) {
       const ledger = new Ledger()
-      const outcome = await quoteCall({ ledger, caps: () => caps() }, name, { prompt: "x" }, call(name)).then(
-        (quote) => quote,
-        (error: unknown) => error,
-      )
-      expect(outcome).toMatchObject({ code: "PRICE_UNKNOWN" })
-      expect((outcome as { tracked?: boolean }).tracked).not.toBe(false)
+      expect(() => quoteCallSync({ ledger, caps: () => caps() }, name, { prompt: "x" }, call(name))).toThrow("PRICE_UNKNOWN")
       expect(ledger.daily()).toBe(0)
       const shapers = shapersFor({ ledger: new Ledger(), caps: () => caps() })
       expect(() => shapers.input(name, { prompt: "x" }, shape("ses_a", `elevenlabs_${name}`))).toThrow("PRICE_UNKNOWN")
@@ -109,7 +99,6 @@ describe("a creative_ name the table does not price is refused on both paths", (
     ledger.rememberPrice("creative_upscale", { prompt: "x" }, { credits: 900, basis: "exact", parts: [] })
     const quoted = quoteCallSync({ ledger, caps: () => caps() }, "creative_upscale", { prompt: "x" }, call("upscale"))
     expect(quoted).toMatchObject({ tracked: true, price: { credits: 900 } })
-    expect(readFileSync(join(repo, "README.md"), "utf8")).toContain(creativeGuardSentence())
   })
 })
 

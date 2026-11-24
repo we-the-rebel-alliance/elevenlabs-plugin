@@ -12,7 +12,6 @@ import {
   LEDGER_REFRESH_MS,
   PRICED_ARGUMENTS,
   priceObstacle,
-  quoteCall,
   quoteCallSync,
 } from "../../src/billing.js"
 import { ALL_TOOLS, ESTIMATE_TOOLS, mustPrice, SPEND_ANY, SPEND_TOOLS } from "../../src/elevenlabs-tools.js"
@@ -292,86 +291,6 @@ describe("a book that decides is never older than one call", () => {
       globalThis.setInterval = realSet
       globalThis.clearInterval = realClear
     }
-  })
-})
-
-describe("an argument is read once, and that one reading is the one that is priced", () => {
-  // This block used to be about a local audio path: the guard read `audio_path` five times and kept no copy, so an
-  // argument that answered with a cheap file while it was measured and a dear one while it was dispatched put a
-  // 3,300-credit call through on a 6-credit hold. Nothing on this machine is measured now, so the shape that made it
-  // possible is gone — but the general rule it stood for is not, and it is now ElevenLabs that holds the reading: the
-  // estimate answers for the arguments it was sent, and those are the arguments that go out.
-  const caps = { sessionCreditCap: 1_000_000, dailyCreditCap: 1_000_000 }
-  const call = (id: string) => ({ sessionID: "ses_a", agent: "build", messageID: "m1", id })
-  /** An arguments object whose `prompt` answers differently each time it is read. */
-  const flipping = () => {
-    const reads = { count: 0 }
-    const args: Record<string, unknown> = { voice_id: "voice_example", model_id: "model_example" }
-    Object.defineProperty(args, "prompt", {
-      get: () => {
-        reads.count++
-        return reads.count <= 1 ? "one word" : "x".repeat(100_000)
-      },
-      enumerable: true,
-      configurable: true,
-    })
-    return { args, reads }
-  }
-
-  test("the estimate is asked with the arguments the call carries, and the price it answers is the price held", async () => {
-    // One estimate, one price, one dispatch: whatever the arguments do when they are read again, the figure on the
-    // ledger is the one ElevenLabs gave for what it was sent, and this plugin invents nothing between the two.
-    const sent: Record<string, unknown>[] = []
-    const ledger = new Ledger()
-    const estimate = async (tool: string, input: Record<string, unknown>) => {
-      sent.push({ ...input })
-      return estimatePrice(tool, input, { output: { credits: 500 } })
-    }
-    const { args } = flipping()
-    const quoted = await quoteCall({ ledger, caps: () => caps, estimate }, "creative_generate_speech", args, call("m1"))
-    expect(sent.length).toBe(1)
-    expect(quoted).toMatchObject({ tracked: true, price: { credits: 500 } })
-    expect(ledger.daily()).toBe(500)
-  })
-
-  test("a second call for the same arguments reuses the first estimate instead of creating a second flow", async () => {
-    // Every estimate creates a flow and a node in the owner's workspace, so asking twice for the same arguments
-    // leaves a second flow behind to say what the first already said. The remembered figure is ElevenLabs' own.
-    let asked = 0
-    const ledger = new Ledger()
-    const estimate = async (tool: string, input: Record<string, unknown>) => {
-      asked++
-      return estimatePrice(tool, input, { output: { credits: 400 } })
-    }
-    const input = { ledger, caps: () => caps, estimate }
-    await quoteCall(input, "creative_generate_speech", speechArgs("hello"), call("m1"))
-    await quoteCall(input, "creative_generate_speech", speechArgs("hello"), call("m2"))
-    expect(asked).toBe(1)
-    expect(ledger.daily()).toBe(800)
-    // Different arguments are a different call, and are estimated on their own.
-    await quoteCall(input, "creative_generate_speech", speechArgs("goodbye"), call("m3"))
-    expect(asked).toBe(2)
-  })
-
-  test("a path argument of any spelling is refused by name, on both paths, and nothing is held", async () => {
-    // The old reproduction's argument, under the live schemas: `audio_path` is not an argument any live creative tool
-    // has, so a call carrying one is refused before an estimate is asked for, and no flow is created for it.
-    let asked = 0
-    const estimate = async () => {
-      asked++
-      return undefined
-    }
-    for (const key of ["audio_path", "path", "file"]) {
-      const ledger = new Ledger()
-      const args = { ...transcribeArgs(), [key]: "a.wav" }
-      expect(() => quoteCallSync({ ledger, caps: () => caps }, "creative_transcribe_audio", args, call("s1")), key).toThrow("PRICE_UNKNOWN")
-      await expect(quoteCall({ ledger, caps: () => caps, estimate }, "creative_transcribe_audio", args, call("m1"))).rejects.toMatchObject({
-        code: "PRICE_UNKNOWN",
-        message: expect.stringContaining(`"${key}"`),
-      })
-      expect(ledger.daily(), key).toBe(0)
-    }
-    expect(asked).toBe(0)
   })
 })
 

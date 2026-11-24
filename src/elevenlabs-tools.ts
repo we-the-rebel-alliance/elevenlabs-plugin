@@ -1,12 +1,12 @@
 // ElevenLabs' tool names, without the `elevenlabs_` server prefix: the one place that classifies them. The default
-// permission rules, the tools RPC's methods, status, the spending guard, the jelly tools and the tests all derive from
-// these lists, and package.json's `jelly.tools` must match them (test/unit/jelly.test.ts). Keep this file free of
+// permission rules, the tools RPC's methods, status, the spending guard, the copied legacy declaration and the tests all
+// derive from these lists, and package.json's `jelly.tools` must match them. Keep this file free of
 // runtime imports: scripts/check-elevenlabs-tools.mjs loads it with Node's type stripping to report upstream drift.
 //
 // These are the 245 names the hosted server's own `tools/list` returned on 2026-11-19, reconciled against
 // test/fixtures/live-tools.json, which also records ElevenLabs' own `readOnlyHint` for each. `npm run drift` compares
 // the two, and test/unit/live-tools.test.ts fails when they disagree. A tool is a read exactly when ElevenLabs marks it
-// read-only, with two exceptions kept stricter on purpose (READ_ONLY_OVERRIDES, below; docs/jelly.md gives the reasons).
+// read-only, with two exceptions kept stricter on purpose (READ_ONLY_OVERRIDES, below).
 // The other classes are read from what each tool's own description and schema say it does; docs/architecture.md
 // records the judgement calls. Every live name has a class.
 
@@ -286,9 +286,9 @@ export const WRITE_TOOLS: readonly string[] = [
 ]
 
 /**
- * Where this table is stricter than ElevenLabs' own `readOnlyHint`, by name, with the reason. Each one is declared to
- * Jelly as not read-only, so a read-only helper is never given it; docs/jelly.md repeats the reason, and the drift test
- * accepts a disagreement only when it is listed here.
+ * Where this table is stricter than ElevenLabs' own `readOnlyHint`, by name, with the reason. Each one is declared as
+ * not read-only in the copied legacy declaration, so a read-only helper is never given it, and the drift test accepts a
+ * disagreement only when it is listed here.
  */
 export const READ_ONLY_OVERRIDES: Readonly<Record<string, string>> = {
   agents_query_knowledge_base_rag:
@@ -398,10 +398,6 @@ export const mustPrice = (raw: string) => {
 }
 
 /** The README sentence for that rule, counted from the same predicate rather than written beside it. */
-export function creativeGuardSentence() {
-  const spenders = ALL_TOOLS.filter(mustPrice).length
-  return `Only when you set a cap: each of the ${spenders} tools that can spend is priced by ElevenLabs' own estimate or refused PRICE_UNKNOWN before it is sent, and so is any name this table does not classify, whatever it starts with. With no cap, the default, nothing is refused for want of a price.`
-}
 
 /**
  * The tools whose live schema accepts `estimate_only: true`, which prices a run without spending anything. The

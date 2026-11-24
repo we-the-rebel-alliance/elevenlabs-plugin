@@ -1,5 +1,5 @@
 // One typed code table, and two docs that must match it exactly. A code that is thrown or returned anywhere must be in
-// the table, and the README's and the scripting doc's tables must not drift in either direction.
+// the table, and the configuration guide's and the scripting doc's tables must not drift in either direction.
 import { describe, expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -36,7 +36,7 @@ function tableCodes(markdown: string): string[] {
     .flatMap((cell) => [...cell.matchAll(/`([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)`/g)].map((code) => code[1]!))
 }
 
-const TROUBLESHOOTING = /## Troubleshooting([\s\S]*?)## Uninstall/.exec(read("README.md"))?.[1] ?? ""
+const ERRORS = /## Errors([\s\S]*?)## Doctor/.exec(read("docs/configuration.md"))?.[1] ?? ""
 const SCRIPTING = read("docs/scripting.md")
 
 describe("codes", () => {
@@ -54,8 +54,8 @@ describe("codes", () => {
     expect([...raised].filter((code) => !known.has(code) && !plain.has(code))).toEqual([])
   })
 
-  test("the README's Troubleshooting table lists exactly the plugin's codes", () => {
-    expect(tableCodes(TROUBLESHOOTING).sort()).toEqual([...PLUGIN_CODES].sort())
+  test("the configuration guide's Errors table lists exactly the plugin's codes", () => {
+    expect(tableCodes(ERRORS).sort()).toEqual([...PLUGIN_CODES].sort())
   })
 
   test("docs/scripting.md lists exactly the tools RPC's codes, the plugin's two refusals, and the source contract's codes", () => {

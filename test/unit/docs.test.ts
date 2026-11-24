@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { GENERATION_KEYS, PRICED_ARGUMENTS } from "../../src/billing.js"
-import { PLUGIN_CODES, TESTED_HOSTS } from "../../src/constants.js"
+import { PLUGIN_CODES, SUPPORTED_HOST, TESTED_HOSTS, UNTESTED_EXAMPLE } from "../../src/constants.js"
 import { ALL_TOOLS, CONVERSATION_TOOLS, OWN_TOOLS, READ_TOOLS, SOURCE_TOOLS, SPEND_TOOLS, TRANSCRIPT_TOOLS } from "../../src/elevenlabs-tools.js"
 import { defaultRules } from "../../src/permissions.js"
 
@@ -15,6 +15,7 @@ const SKILLS = readdirSync(join(ROOT, "skills")).map((name) => `skills/${name}/S
 // Everything a user or the model reads about the current release.
 const FILES = ["README.md", "SECURITY.md", "CONTRIBUTING.md", ...DOCS, ...SKILLS]
 const text = (file: string) => readFileSync(join(ROOT, file), "utf8")
+const flat = (file: string) => text(file).replace(/\s+/g, " ")
 
 /** Every TypeScript file under src/, media helpers and the tools RPC included. */
 function sources(directory = "src", out: string[] = []): string[] {
@@ -25,7 +26,6 @@ function sources(directory = "src", out: string[] = []): string[] {
   }
   return out
 }
-const flat = (file: string) => text(file).replace(/\s+/g, " ")
 
 describe("docs", () => {
   test.each(FILES)("%s names only ElevenLabs tools the plugin knows", (file) => {
@@ -35,23 +35,18 @@ describe("docs", () => {
     expect(named.filter((tool) => ![...ALL_TOOLS, ...OWN_TOOLS, ...SOURCE_TOOLS].includes(tool))).toEqual([])
   })
 
-  // S5: version numbers live in package.json and the CHANGELOG heading only, and nothing says the package is unreleased.
-  // The release itself is the one exception: the README's install spec names its tag, and CONTRIBUTING's Release steps name
-  // the version. Everything else names no version and no pre-release state.
+  // Version numbers live in package.json and the CHANGELOG heading only, and nothing says the package is unreleased.
+  // The release itself is the one exception: an install spec names its tag, and CONTRIBUTING's release section names the
+  // version. Everything else names no version and no pre-release state.
   test.each(["README.md", "CONTRIBUTING.md", ...DOCS, ...SKILLS])("%s names no version of the plugin and no pre-release state, but the release", (file) => {
-    const body = flat(file).replace(/opencode-elevenlabs#v\d+\.\d+\.\d+/g, "").replace(/## Releasing .*?(?= ## |$)/, "")
-    expect(body).not.toMatch(/opencode-elevenlabs@\d|\bv?\d+\.\d+\.\d+-|\bv?0\.0\.\d\b|not (yet )?published|"private"/i)
+    const body = flat(file).replace(/elevenlabs-plugin#v<version>/g, "").replace(/v0\.0\.0 \(phase 4b\)/g, "").replace(/## Releasing .*?(?= ## |$)/, "")
+    expect(body).not.toMatch(/elevenlabs-plugin@\d|\bv?\d+\.\d+\.\d+-|\bv?0\.0\.\d\b|not (yet )?published|"private"/i)
   })
 
-  // This used to assert that the README's Known limits was the one place calling the tool table provisional. The table
-  // is the live catalogue now (test/fixtures/README.md), so no file may call it provisional, and Known limits says
-  // where the table came from instead.
-  test("nothing calls the tool table provisional, and the README says the table was captured live", () => {
+  test("nothing calls the tool table provisional, and the README says the price is unverified until measured", () => {
     for (const file of FILES) expect({ file, hits: (flat(file).match(/provisional/gi) ?? []).length }).toEqual({ file, hits: 0 })
     const limits = /## Known limits([\s\S]*?)## Uninstall/.exec(flat("README.md"))?.[1] ?? ""
-    expect(limits).toMatch(/live/i)
-    // The one fact still unverified is named there, and nowhere is it stated as settled.
-    expect(limits).toContain("unverified until the live reconcile")
+    expect(limits).toMatch(/unverified until it is measured/i)
   })
 
   // Once the plugin is removed and OpenCode reloads, `mcp logout elevenlabs` finds no server: the README signs out first,
@@ -60,7 +55,7 @@ describe("docs", () => {
     const uninstall = /## Uninstall(.*?)## Links/.exec(flat("README.md"))?.[1] ?? ""
     const logout = uninstall.indexOf("opencode mcp logout elevenlabs")
     const check = uninstall.indexOf("opencode auth list")
-    const remove = uninstall.indexOf("opencode plugin remove github:joe-broadhead/opencode-elevenlabs#v0.0.10")
+    const remove = uninstall.indexOf("opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v<version>")
     expect(logout).toBeGreaterThanOrEqual(0)
     expect(check).toBeGreaterThan(logout)
     expect(remove).toBeGreaterThan(check)
@@ -84,21 +79,15 @@ describe("docs", () => {
     }
   })
 
-  test("the README's Troubleshooting table lists every code the plugin raises", () => {
-    const table = /## Troubleshooting([\s\S]*?)## Known limits/.exec(text("README.md"))?.[1] ?? ""
-    const documented = [...table.matchAll(/\| `([A-Z][A-Z_]+)` \|/g)].map((match) => match[1]!).sort()
-    expect(documented).toEqual([...PLUGIN_CODES].sort())
+  test("the README's Troubleshooting section points at both commands and the guide", () => {
+    const section = /## Troubleshooting([\s\S]*?)## Known limits/.exec(flat("README.md"))?.[1] ?? ""
+    for (const expected of ["/elevenlabs-status", "/elevenlabs-doctor", "docs/configuration.md"]) expect(section).toContain(expected)
   })
 
-  test("the README explains the Skills row that names a replacing skill, and its fix", () => {
-    expect(flat("README.md")).toMatch(/Skills.*is replaced by.*Rename or move/)
-  })
-
-  test("the Jelly guide states the declared tool counts", () => {
-    const tools = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { jelly: { tools: { readOnly: boolean }[] } }).jelly.tools
-    const declared = `${tools.length} tools are declared (${tools.filter((tool) => tool.readOnly).length} read-only)`
-    expect(flat("docs/jelly.md")).toContain(declared)
-    expect(flat("docs/jelly.md")).toContain("A tool ElevenLabs adds later is not asked about in Jelly")
+  test("the README names the three skills, and each says when to load it", () => {
+    const readme = flat("README.md")
+    for (const name of ["elevenlabs", "elevenlabs-calls", "elevenlabs-creative"]) expect(readme).toContain(name)
+    expect(readme).toContain("Load the matching one first")
   })
 
   // An admin copies these blocks into managed config: each must be the plugin's real block for that access value.
@@ -127,8 +116,8 @@ describe("docs", () => {
   })
 
   // R19: the export root needs the tool's own rule and the host's external_directory rule.
-  test("the README and the configuration guide give both rules for the media folder, with an absolute path", () => {
-    for (const file of ["README.md", "docs/configuration.md", "docs/scripting.md"]) {
+  test("the configuration and scripting guides give both rules for the media folder, with an absolute path", () => {
+    for (const file of ["docs/configuration.md", "docs/scripting.md"]) {
       expect(flat(file)).toContain("external_directory")
       // R19 and the resource is the absolute path of mediaRoot, never a `~` the host would not expand.
       expect(flat(file)).toContain('"resource": "/absolute/path/of/your/mediaRoot/*"')
@@ -141,7 +130,7 @@ describe("docs", () => {
   // a transcription is classed as a change, so `read-only` denies it with the rest of the spending tools.
   test("the docs say transcription spends, and that read-only denies every spending tool", () => {
     expect(flat("README.md")).toContain("Transcription spends like everything else")
-    expect(flat("README.md")).toContain("`access: \"read-only\"` denies it along with every other tool that can spend")
+    expect(flat("README.md")).toContain("denies it along with every other tool that can spend")
     expect(flat("SECURITY.md")).toContain("**Transcription bills too**")
     expect(flat("docs/configuration.md")).toContain("`access: \"read-only\"` denies every tool that can spend, `creative_transcribe_audio` included")
   })
@@ -154,11 +143,10 @@ describe("docs", () => {
     expect(flat(file)).not.toMatch(/\b\d[\d,.]* ?credits? (?:a|an|per|\/) ?(?:minute|second|character|word|image|generation|video|voice)\b/i)
   })
 
-  test("the README names every billed tool in its spending section, and the estimate caveat", () => {
-    const section = /## Spending([\s\S]*?)## Media and files/.exec(flat("README.md"))?.[1] ?? ""
+  test("the configuration guide names every billed tool, and the README says how to price one", () => {
     for (const tool of SPEND_TOOLS) expect(flat("docs/configuration.md")).toContain(`elevenlabs_${tool}`)
-    expect(section).toContain("PRICE_UNKNOWN")
-    expect(flat("README.md")).toContain("unverified until the live reconcile")
+    expect(flat("README.md")).toContain("estimate_only")
+    expect(flat("README.md")).toContain("billed in **credits**")
   })
 
   test("the configuration guide gives the status rows and the states", () => {
@@ -182,33 +170,21 @@ describe("docs", () => {
     expect(readme).toContain("There is no credit cap unless you set one.")
     expect(readme).toContain("Caps are opt-in.")
     expect(readme).not.toMatch(/Caps are on by default|2,000 credits/)
-    expect(readme).toContain("A cap bounds this plugin, not your account")
+    expect(readme).toContain("A cap bounds this plugin's tools-RPC calls, not your account")
     expect(readme).toContain("No dollar figure is derived from credits")
-  })
-
-
-})
-
-// The README prints the block the plugin inserts, in full, generated from defaultRules: it is what an administrator
-// copies into an agent's own permissions, so it cannot be elided or drift.
-describe("the default rules block", () => {
-  test("the README's Permissions section prints defaultRules() in full", () => {
-    const section = /## Permissions([\s\S]*?)## Configure/.exec(readFileSync(join(ROOT, "README.md"), "utf8"))?.[1] ?? ""
-    const printed = /generated from[\s\S]*?```json\n([\s\S]*?)\n```/.exec(section)?.[1] ?? "[]"
-    expect(JSON.parse(printed)).toEqual(defaultRules())
   })
 })
 
 // Every "tested on …" mention states TESTED_HOSTS, so a release added to the list cannot leave a stale sentence behind.
 describe("tested hosts", () => {
-  const UNRELEASED = /## \[0\.0\.0\] - Unreleased([\s\S]*?)(?=\n## |$)/.exec(readFileSync(join(ROOT, "CHANGELOG.md"), "utf8"))?.[1] ?? ""
+  const UNRELEASED = /## 0\.0\.0 \(unreleased\)([\s\S]*?)(?=\n## |$)/.exec(readFileSync(join(ROOT, "CHANGELOG.md"), "utf8"))?.[1] ?? ""
   const SOURCES: [string, string][] = [
     ["README.md", readFileSync(join(ROOT, "README.md"), "utf8")],
     ["AGENTS.md", readFileSync(join(ROOT, "AGENTS.md"), "utf8")],
     ["SECURITY.md", readFileSync(join(ROOT, "SECURITY.md"), "utf8")],
     ["docs/configuration.md", readFileSync(join(ROOT, "docs/configuration.md"), "utf8")],
     ["docs/architecture.md", readFileSync(join(ROOT, "docs/architecture.md"), "utf8")],
-    ["CHANGELOG.md (Unreleased)", UNRELEASED],
+    ["CHANGELOG.md (unreleased)", UNRELEASED],
   ]
 
   test.each(SOURCES)("%s names exactly TESTED_HOSTS wherever it says what is tested", (file, body) => {
@@ -217,7 +193,7 @@ describe("tested hosts", () => {
       .flatMap((line) => line.split(/\.\s+/))
       .filter((sentence) => /\btested\b/i.test(sentence))
       // The supported range is not a tested release: drop a backticked `>=a.b.c <d.e.f` span before reading versions.
-      .map((sentence) => sentence.replace(/`[^`]*>=[^`]*`/g, "").replace(/`[^`]*(?:2\.2\.3, 2\.2\.4[^`]*)`/g, (span) => span.slice(1, -1)))
+      .map((sentence) => sentence.replace(/`[^`]*>=[^`]*`/g, ""))
       .map((sentence) => [...sentence.matchAll(/\b\d+\.\d+\.\d+\b/g)].map((version) => version[0]!))
       .filter((versions) => versions.length > 0)
     for (const versions of mentions) expect({ file, versions: [...new Set(versions)].sort() }).toEqual({ file, versions: [...TESTED_HOSTS].sort() })
@@ -225,22 +201,25 @@ describe("tested hosts", () => {
 
   test("the README's Requirements line names every tested release", () => {
     const requirements = /## Requirements([\s\S]*?)## /i.exec(readFileSync(join(ROOT, "README.md"), "utf8"))?.[1] ?? ""
-    const named = [...requirements.matchAll(/\b\d+\.\d+\.\d+\b/g)].map((match) => match[0]).filter((version) => version !== "2.4.0")
+    const named = [...requirements.matchAll(/\b\d+\.\d+\.\d+\b/g)].map((match) => match[0]).filter((version) => version !== "2.5.0")
     expect([...new Set(named)].sort()).toEqual([...TESTED_HOSTS].sort())
   })
 
   // A release inside the range that ships later is the untested example, so it must be one that never ships.
-  test("the untested example is 2.2.99 or absent, and no doc names a future release as tested", () => {
+  test("the untested example is the next minor line, and no doc names it as tested", () => {
+    expect(UNTESTED_EXAMPLE).toBe("2.5.0")
+    expect(SUPPORTED_HOST).toBe(">=2.4.1 <2.5.0")
     const all = SOURCES.map(([, body]) => body).join("\n")
-    expect(all).not.toMatch(/\b2\.(?:2\.(?:[89]|9[0-8])|3\.(?:[3-9]|[1-9]\d))\b(?!\d)/)
-    expect(readFileSync(join(ROOT, "test/unit/host-version.test.ts"), "utf8")).toContain("2.2.99")
+    for (const sentence of all.split(/\.\s+/)) {
+      if (/\btested\b/i.test(sentence)) expect(sentence.replace(/`[^`]*>=[^`]*`/g, "")).not.toContain(UNTESTED_EXAMPLE)
+    }
   })
 })
 
 describe("README order", () => {
-  test("follows S5's section order", () => {
+  test("follows the short 4a structure", () => {
     const headings = [...readFileSync(join(ROOT, "README.md"), "utf8").matchAll(/^## (.+)$/gm)].map((match) => match[1]!)
-    expect(headings).toEqual(["Requirements", "Install", "Sign in", "Use", "Spending", "Media and files", "Regions", "Permissions", "Configure", "Organisation rollout", "Troubleshooting", "Known limits", "Uninstall", "Links"])
+    expect(headings).toEqual(["Requirements", "Install", "Sign in", "Use", "Spending", "Media and files", "Regions", "Conversations", "Permissions", "Configure", "Troubleshooting", "Known limits", "Uninstall", "Links"])
     // The affiliation sentence is the first line after the opening paragraph.
     const lines = readFileSync(join(ROOT, "README.md"), "utf8").split("\n")
     const affiliation = lines.findIndex((line) => line.startsWith("Unofficial;"))
@@ -248,8 +227,8 @@ describe("README order", () => {
     expect(lines.slice(0, affiliation).filter((line) => line.trim() !== "").length).toBeLessThanOrEqual(3)
   })
 
-  test("the read tools are all named in the README's block, so a user can write a rule for any of them", () => {
-    const block = /generated from[\s\S]*?```json\n([\s\S]*?)\n```/.exec(readFileSync(join(ROOT, "README.md"), "utf8"))?.[1] ?? "[]"
+  test("the read tools are all named in the configuration guide's block, so a user can write a rule for any of them", () => {
+    const block = /### `access: "all"`[^\n]*\n[\s\S]*?```json\n([\s\S]*?)\n```/.exec(readFileSync(join(ROOT, "docs/configuration.md"), "utf8"))?.[1] ?? "[]"
     const actions = (JSON.parse(block) as { action: string }[]).map((rule) => rule.action)
     for (const tool of READ_TOOLS) expect(actions).toContain(`elevenlabs_${tool}`)
   })
@@ -270,16 +249,12 @@ describe("the priced-argument allowlists", () => {
   /** Argument names every priced tool allows, whatever it generates: the part the prose states once. */
   const common = [...PRICED_ARGUMENTS.values()].reduce((kept, allowed) => kept.filter((name) => allowed.has(name)), [...(PRICED_ARGUMENTS.values().next().value ?? [])])
 
-  // This used to expect `estimateOnly` beside `estimate_only`: the live schemas have only the snake_case name, so the
-  // camelCase spelling is gone from every allowlist and from the prose.
   test("the prose states the arguments every priced tool allows, and no more", () => {
     expect([...common].sort()).toEqual(["estimate_only", "flow_id"])
     const sentence = /Every priced call may carry ([^.]*)\./.exec(section.replace(/\s+/g, " "))?.[1] ?? ""
     expect(names(sentence).sort()).toEqual([...common].sort())
   })
 
-  // This used to list three transcription names and four count keys. The live catalogue has one transcription tool
-  // and one batch-size name, `generations_count`, so the prose is singular and the exception is a single tool.
   test("the count key is documented for exactly the tools that take it", () => {
     const refuses = [...PRICED_ARGUMENTS].filter(([, allowed]) => !GENERATION_KEYS.every((key) => allowed.has(key))).map(([tool]) => tool)
     // The one exception the prose names. If another tool ever stops taking a count, this sentence stops being true.

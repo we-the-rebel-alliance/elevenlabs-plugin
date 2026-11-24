@@ -130,7 +130,7 @@ was deciding from an assumption.
 2. `npm run drift` names every tool the plugin does not classify, every tool the list no longer has, and every
    read-only mark that disagrees with a class.
 3. Update `src/elevenlabs-tools.ts` (classes, transcript lists, spend lists, `READ_ONLY_OVERRIDES`), then
-   `package.json`'s `jelly.tools`, `tool-registry.json`, the README's Permissions block and the three rule blocks in
+   `package.json`'s `jelly.tools`, `tool-registry.json`, and the three rule blocks in
    `docs/configuration.md`. `npm run check` fails until they agree.
 
 No test pins this file as final: tests assert it matches the plugin's table and declaration, so a re-captured fixture

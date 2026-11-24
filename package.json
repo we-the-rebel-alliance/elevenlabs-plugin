@@ -1,8 +1,8 @@
 {
-  "name": "@joe-broadhead/opencode-elevenlabs",
-  "version": "0.0.10",
+  "name": "@we-the-rebel-alliance/elevenlabs-plugin",
+  "version": "0.0.0",
   "private": true,
-  "description": "Unofficial OpenCode plugin for ElevenLabs: manage voice and chat agents, review their calls, and generate speech, images and video through ElevenLabs' official MCP server, with a spending guard and files saved to disk",
+  "description": "Unofficial OpenCode plugin for ElevenLabs: voice and chat agents, calls, and speech, image and video generation.",
   "keywords": [
     "opencode",
     "opencode-plugin",
@@ -12,11 +12,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/joe-broadhead/opencode-elevenlabs.git"
+    "url": "git+https://github.com/we-the-rebel-alliance/elevenlabs-plugin.git"
   },
-  "homepage": "https://github.com/joe-broadhead/opencode-elevenlabs#readme",
+  "homepage": "https://github.com/we-the-rebel-alliance/elevenlabs-plugin#readme",
   "bugs": {
-    "url": "https://github.com/joe-broadhead/opencode-elevenlabs/issues"
+    "url": "https://github.com/we-the-rebel-alliance/elevenlabs-plugin/issues"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -36,7 +36,7 @@
     "CHANGELOG.md"
   ],
   "opencode": {
-    "host": ">=2.2.3 <2.4.0",
+    "host": ">=2.4.1 <2.5.0",
     "icons": [
       {
         "src": "assets/icon.svg",
@@ -130,7 +130,7 @@
     "title": "ElevenLabs",
     "summary": "Your ElevenLabs agents, their calls, and generated speech, images and video.",
     "icon": "assets/icon.svg",
-    "cost": "Nineteen tools spend the signed-in workspace's ElevenLabs credits, such as generating speech, images and video. A speech call renders two takes and an image call four by default, a retry is charged again, and each paid result has a cost line with the credits it reported. No cap unless you set one.",
+    "cost": "Nineteen tools spend the signed-in workspace's ElevenLabs credits, such as generating speech, images and video. A speech call renders two takes and an image call four by default, a retry is charged again, and each priced tools-RPC result has a cost line with the credits it reported. No cap unless you set one.",
     "tools": [
       {
         "name": "elevenlabs_account_get_usage",
@@ -1731,7 +1731,7 @@
           "key": "sessionCreditCap",
           "label": "Credit cap per session",
           "type": "number",
-          "description": "The most credits one session may spend, as a whole number. Leave it unset for no cap, the default.",
+          "description": "The most credits priced tools-RPC calls in one session may spend, as a whole number. Leave it unset for no cap, the default.",
           "integer": true,
           "min": 1,
           "max": 10000000
@@ -1740,7 +1740,7 @@
           "key": "dailyCreditCap",
           "label": "Daily credit cap",
           "type": "number",
-          "description": "The most credits the plugin may spend in a rolling 24 hours in this data directory, across sessions, scripts and restarts, as a whole number. Leave it unset for no cap, the default.",
+          "description": "The most credits priced tools-RPC calls may spend in a rolling 24 hours in this data directory, across sessions and restarts, as a whole number. Leave it unset for no cap, the default.",
           "integer": true,
           "min": 1,
           "max": 10000000
@@ -1770,14 +1770,14 @@
     "conformance": "node scripts/check.mjs conformance"
   },
   "devDependencies": {
-    "@opencode/client": "2.2.3",
-    "@opencode/plugin": "2.2.3",
-    "@opencode/sdk": "2.2.3",
+    "@opencode/client": "2.4.1",
+    "@opencode/plugin": "2.4.1",
+    "@opencode/sdk": "2.4.1",
     "@opentui/core": "0.8.0",
     "@opentui/solid": "0.8.0",
     "@types/bun": "1.4.4",
     "@types/node": "24.19.2",
-    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.3.0",
+    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#2fd55cdc0c6c1067927fefc403a88bfd18c9a971",
     "esbuild": "0.28.2",
     "solid-js": "1.9.17",
     "typescript": "5.9.3"

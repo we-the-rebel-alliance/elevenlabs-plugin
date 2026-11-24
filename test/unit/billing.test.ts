@@ -11,8 +11,6 @@ import {
   generationsOf,
   isEstimate,
   Ledger,
-  quoteCall,
-  quoteCallSync,
   remaining,
   settlementOf,
   SpendRefused,
@@ -23,7 +21,6 @@ import { storageOver } from "../fixtures/store.js"
 
 const caps = (session: number | null = 2000, daily: number | null = 10000) => ({ sessionCreditCap: session, dailyCreditCap: daily })
 const spend = (sessionCredits = 0, dailyCredits = 0) => ({ sessionCredits, dailyCredits })
-const call = (id = "call_1", sessionID = "ses_a") => ({ sessionID, agent: "build", messageID: "msg_a", id })
 
 describe("prices from ElevenLabs' own estimate", () => {
   test("the reported figure is the batch total, and a fraction rounds up into the ledger", () => {
@@ -267,120 +264,11 @@ describe("the ledger", () => {
   })
 })
 
-describe("quoteCall", () => {
-  /** An estimate that answers like the live server: one batch total for the arguments it is sent. */
-  const estimator = (credits: number) => async (tool: string, input: Record<string, unknown>) => estimatePrice(tool, input, { output: { credits } })
-
-  test("prices from ElevenLabs' estimate, reserves, and refuses the second of two parallel calls", async () => {
-    const ledger = new Ledger()
-    const guard = { ledger, caps: () => caps(2000, 10000), estimate: estimator(1200) }
-    // two calls that start together, 1,200 each against 2,000. Exactly one may pass.
-    const results = await Promise.allSettled([
-      quoteCall(guard, "creative_generate_speech", { prompt: "x".repeat(600) }, call("c1")),
-      quoteCall(guard, "creative_generate_speech", { prompt: "y".repeat(600) }, call("c2")),
-    ])
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
-    const refused = results.find((result) => result.status === "rejected") as PromiseRejectedResult
-    expect((refused.reason as SpendRefused).code).toBe("SPEND_CAP_REACHED")
-    expect(ledger.spend("ses_a")).toEqual({ sessionCredits: 1200, dailyCredits: 1200 })
-  })
-
-  test("the synchronous form reserves the same way, from a price the ledger already remembers", () => {
-    const ledger = new Ledger()
-    const guard = { ledger, caps: () => caps(2000, 10000) }
-    const args = { prompt: "x".repeat(600) }
-    // The script path cannot await an estimate, so a script sends `estimate_only` itself and the price is remembered.
-    ledger.rememberPrice("creative_generate_speech", args, { credits: 1200, basis: "exact", parts: [] })
-    expect(quoteCallSync(guard, "creative_generate_speech", args, call("c1")).price.credits).toBe(1200)
-    expect(() => quoteCallSync(guard, "creative_generate_speech", args, call("c2"))).toThrow(SpendRefused)
-    // With nothing remembered it refuses rather than guesses.
-    expect(() => quoteCallSync(guard, "creative_generate_speech", { prompt: "new" }, call("c3"))).toThrow(SpendRefused)
-  })
-
-  test("clamps a request to what the budget affords, in the key the caller used", async () => {
-    const ledger = new Ledger()
-    // 4,000 for the batch of four the call asks for: 1,000 a generation, so 2,000 buys two.
-    const aliased: Record<string, unknown> = { prompt: "a mug", generations_count: 4 }
-    const { price } = await quoteCall({ ledger, caps: () => caps(2000, 10000), estimate: estimator(4000) }, "creative_generate_image", aliased, call())
-    expect(aliased).toEqual({ prompt: "a mug", generations_count: 2 })
-    expect(price.credits).toBe(2000)
-    expect(price.basis).toBe("at-most")
-  })
-
-  test("asks ElevenLabs once, and never retries a failed estimate", async () => {
-    const ledger = new Ledger()
-    let asked = 0
-    const failing = async () => (asked++, undefined)
-    await expect(quoteCall({ ledger, caps: () => caps(), estimate: failing }, "creative_generate_image", { prompt: "x" }, call())).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
-    expect(asked).toBe(1)
-    const succeeding = async () => (asked++, { credits: 500, basis: "exact" as const, parts: [] })
-    await quoteCall({ ledger, caps: () => caps(), estimate: succeeding }, "creative_generate_video", { prompt: "y" }, call("c2"))
-    expect(asked).toBe(2)
-  })
-
-  test("a price it remembers is used before a second estimate, which would leave a second flow behind", async () => {
-    const ledger = new Ledger()
-    let asked = 0
-    const estimate = async (tool: string, input: Record<string, unknown>) => (asked++, estimatePrice(tool, input, { output: { credits: 300 } }))
-    const args = { prompt: "a mug", generations_count: 1 }
-    expect((await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_image", { ...args }, call("c1"))).price.credits).toBe(300)
-    expect((await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_image", { ...args }, call("c2"))).price.credits).toBe(300)
-    expect(asked).toBe(1)
-  })
-
-  test("a tool it cannot price is refused with a next step that works, and never guesses", async () => {
-    const ledger = new Ledger()
-    // `creative_design_voice` has no `estimate_only` at all, so its next step is the one that always works.
-    try {
-      await quoteCall({ ledger, caps: () => caps() }, "creative_design_voice", { voice_description: "warm", text: "hi", language: "en" }, call())
-      throw new Error("expected a refusal")
-    } catch (error) {
-      const refusal = error as SpendRefused
-      expect(refusal.code).toBe("PRICE_UNKNOWN")
-      expect(refusal.message).toContain('does not accept "estimate_only"')
-      expect(refusal.nextStep).toContain("both")
-      expect(refusal.nextStep).toContain("null")
-      expect(refusal.nextStep).not.toContain("estimate_only")
-    }
-    // An estimable tool with no estimate to hand is told to ask ElevenLabs first.
-    try {
-      await quoteCall({ ledger, caps: () => caps() }, "creative_generate_video", { prompt: "x" }, call("c2"))
-      throw new Error("expected a refusal")
-    } catch (error) {
-      expect((error as SpendRefused).nextStep).toContain("estimate_only")
-    }
-    // A remembered price is enough.
-    ledger.rememberPrice("creative_edit_image", { prompt: "x" }, { credits: 300, basis: "exact", parts: [] })
-    expect((await quoteCall({ ledger, caps: () => caps() }, "creative_edit_image", { prompt: "x" }, call("c3"))).price.credits).toBe(300)
-  })
-
-  test("an argument the live schema does not have is refused before any estimate is asked for", async () => {
-    const ledger = new Ledger()
-    let asked = 0
-    const estimate = async (tool: string, input: Record<string, unknown>) => (asked++, estimatePrice(tool, input, { output: { credits: 300 } }))
-    const guard = { ledger, caps: () => caps(), estimate }
-    await expect(quoteCall(guard, "creative_generate_image", { prompt: "x", seed: 7 }, call())).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
-    // Nothing was sent: the refusal costs no flow in the workspace.
-    expect(asked).toBe(0)
-  })
-
-  test("both caps off runs a billed call unpriced, and an estimate call is never charged", async () => {
-    const ledger = new Ledger()
-    expect((await quoteCall({ ledger, caps: () => caps(null, null) }, "creative_generate_video", { prompt: "x" }, call())).tracked).toBe(false)
-    expect(await quoteCall({ ledger, caps: () => caps() }, "creative_generate_image", { prompt: "x", estimate_only: true }, call())).toMatchObject({ price: { credits: 0 }, tracked: false })
+describe("isEstimate", () => {
+  test("accepts only the schema's own spelling on a tool whose schema has the flag", () => {
     expect(isEstimate("creative_generate_image", { estimate_only: true })).toBe(true)
-    // Only the schema's own spelling, on a tool whose schema really has the flag: anything else is a word the server
-    // ignores, and reading it as an estimate would let a paid call through unpriced.
     expect(isEstimate("creative_generate_image", { estimateOnly: true })).toBe(false)
     expect(isEstimate("creative_design_voice", { estimate_only: true })).toBe(false)
     expect(isEstimate("creative_generate_image", {})).toBe(false)
-  })
-
-  test("a read is never priced, and a transcription is", async () => {
-    const ledger = new Ledger()
-    expect((await quoteCall({ ledger, caps: () => caps() }, "agents_list", {}, call())).price.credits).toBe(0)
-    await expect(quoteCall({ ledger, caps: () => caps() }, "creative_transcribe_audio", { connect_from: "node_example" }, call("t1"))).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
-    const estimate = estimator(330)
-    expect((await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_transcribe_audio", { connect_from: "node_example" }, call("t2"))).price.credits).toBe(330)
   })
 })

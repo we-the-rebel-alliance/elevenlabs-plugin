@@ -3,21 +3,12 @@
 // the three pricing reproductions (to) are re-expressed against what stands in the formula's place. Each
 // says what it used to assert, and what now holds instead.
 import { describe, expect, test } from "bun:test"
-import {
-  estimatePrice,
-  Ledger,
-  LEDGER_KEY,
-  quoteCall,
-  quoteCallSync,
-  RESERVATION_MS,
-  settlementOf,
-  SpendRefused,
-} from "../../src/billing.js"
+import { Ledger, quoteCallSync, RESERVATION_MS, settlementOf, SpendRefused } from "../../src/billing.js"
 import { REGIONS } from "../../src/constants.js"
 import { ALL_TOOLS, mustPrice, priced } from "../../src/elevenlabs-tools.js"
 import { shapersFor } from "../../src/host/tools-rpc.js"
 import { sharedStore, storageOver } from "../fixtures/store.js"
-import { otherElevenlabsServers, toolOf } from "../../src/plugin.js"
+import { otherElevenlabsServers } from "../../src/plugin.js"
 import { buildStatus, formatStatus } from "../../src/status.js"
 
 const caps = (session: number | null = 100_000, daily: number | null = 100_000) => ({ sessionCreditCap: session, dailyCreditCap: daily })
@@ -40,23 +31,13 @@ const priceKnown = (ledger: Ledger, credits: number) => {
 }
 
 /** The refusal a priced call raised, for asserting the words it gives the caller. */
-const refusal = async (run: Promise<unknown>) => {
-  const outcome = await run.then(
+const refusal = async (run: Promise<unknown> | (() => unknown)) => {
+  const outcome = await (typeof run === "function" ? Promise.resolve().then(run) : run).then(
     () => undefined,
     (error: unknown) => error,
   )
   expect(outcome).toBeInstanceOf(SpendRefused)
   return outcome as SpendRefused
-}
-
-/** An estimate seam that answers every call with the same figure, and counts how many times ElevenLabs was asked. */
-const estimator = (credits: number) => {
-  const asked: string[] = []
-  const estimate = async (tool: string, input: Record<string, unknown>) => {
-    asked.push(tool)
-    return estimatePrice(tool, input, { output: { credits } })
-  }
-  return { estimate, asked }
 }
 
 describe("a file on disk sets no price, because no file is part of the call", () => {
@@ -65,11 +46,12 @@ describe("a file on disk sets no price, because no file is part of the call", ()
   // all — `{connect_from, estimate_only, flow_id, model_id, view_state_id}` — so the audio is a node in the
   // workspace, its length is ElevenLabs' to know, and the price comes back from the server or the call does not run.
 
-  test("a transcription is priced by ElevenLabs' own estimate, not by anything on this machine", async () => {
+  test("a transcription is priced by ElevenLabs' own estimate, not by anything on this machine", () => {
     const ledger = new Ledger()
-    const { estimate, asked } = estimator(330)
-    const { price, tracked } = await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_transcribe_audio", transcribeArgs(), call("t"))
-    expect({ credits: price.credits, basis: price.basis, tracked, asked }).toEqual({ credits: 330, basis: "exact", tracked: true, asked: ["creative_transcribe_audio"] })
+    const args = transcribeArgs()
+    ledger.rememberPrice("creative_transcribe_audio", args, { credits: 330, basis: "exact", parts: ["estimated by ElevenLabs"] })
+    const { price, tracked } = quoteCallSync({ ledger, caps: () => caps() }, "creative_transcribe_audio", args, call("t"))
+    expect({ credits: price.credits, basis: price.basis, tracked }).toEqual({ credits: 330, basis: "exact", tracked: true })
     expect(price.parts).toContain("estimated by ElevenLabs")
     // No count in the schema, so there is no per-generation figure to divide a batch into, and nothing to clamp.
     expect(price.perGeneration).toBeUndefined()
@@ -81,16 +63,15 @@ describe("a file on disk sets no price, because no file is part of the call", ()
     // can price the call, and the server would be pricing arguments it does not understand. It never gets asked.
     for (const extra of [{ path: "clip.wav" }, { audio_file: "clip.wav" }, { file: "clip.wav" }, { duration_seconds: 60 }]) {
       const ledger = new Ledger()
-      const { estimate, asked } = estimator(330)
-      const refused = quoteCall({ ledger, caps: () => caps(), estimate }, "creative_transcribe_audio", { ...transcribeArgs(), ...extra }, call("t"))
-      await expect(refused).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
-      expect({ key: Object.keys(extra)[0], asked, daily: ledger.daily() }).toEqual({ key: Object.keys(extra)[0], asked: [], daily: 0 })
+      const refused = refusal(() => quoteCallSync({ ledger, caps: () => caps() }, "creative_transcribe_audio", { ...transcribeArgs(), ...extra }, call("t")))
+      expect((await refused).code).toBe("PRICE_UNKNOWN")
+      expect({ key: Object.keys(extra)[0], daily: ledger.daily() }).toEqual({ key: Object.keys(extra)[0], daily: 0 })
     }
   })
 
   test("the refusal names the argument and the next step is the estimate the caller can run", async () => {
     const ledger = new Ledger()
-    const failure = await refusal(quoteCall({ ledger, caps: () => caps() }, "creative_transcribe_audio", { ...transcribeArgs(), path: "clip.wav" }, call("t")))
+    const failure = await refusal(() => quoteCallSync({ ledger, caps: () => caps() }, "creative_transcribe_audio", { ...transcribeArgs(), path: "clip.wav" }, call("t")))
     expect(failure.message).toContain(`"path" is an argument ElevenLabs' own schema for this tool does not have`)
     expect(failure.nextStep).toContain(`"estimate_only": true`)
     expect(priced("creative_transcribe_audio")).toBe(true)
@@ -112,18 +93,17 @@ describe("every argument is held against ElevenLabs' own schema, not against a l
     ]
     for (const extra of pairs) {
       const ledger = new Ledger()
-      const { estimate, asked } = estimator(330)
-      const refused = quoteCall({ ledger, caps: () => caps(), estimate }, "creative_transcribe_audio", { ...transcribeArgs(), ...extra }, call("t"))
-      await expect(refused).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
-      expect({ keys: Object.keys(extra).join("+"), asked }).toEqual({ keys: Object.keys(extra).join("+"), asked: [] })
+      const refused = refusal(() => quoteCallSync({ ledger, caps: () => caps() }, "creative_transcribe_audio", { ...transcribeArgs(), ...extra }, call("t")))
+      expect((await refused).code).toBe("PRICE_UNKNOWN")
+      expect(Object.keys(extra).join("+")).toBeTruthy()
     }
   })
 
   test("a URL is audio this plugin cannot price either, so it refuses rather than pricing around it", async () => {
     const ledger = new Ledger()
-    await expect(
-      quoteCall({ ledger, caps: () => caps() }, "creative_transcribe_audio", { ...transcribeArgs(), audio_file: "https://example.test/clip.wav" }, call("t")),
-    ).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
+    expect(
+      () => quoteCallSync({ ledger, caps: () => caps() }, "creative_transcribe_audio", { ...transcribeArgs(), audio_file: "https://example.test/clip.wav" }, call("t")),
+    ).toThrow("PRICE_UNKNOWN")
     expect(ledger.daily()).toBe(0)
   })
 
@@ -153,26 +133,25 @@ describe("a length the caller types prices nothing at all", () => {
   test("no stated length prices such a call, high, low or zero", async () => {
     for (const args of [{ music_length_ms: 30, duration_seconds: 300 }, { music_length_ms: 300_000 }, { music_length_ms: 1 }, { duration_seconds: 0 }, {}]) {
       const ledger = new Ledger()
-      const { estimate, asked } = estimator(4_500)
-      await expect(quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_music", args, call("m"))).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
+      expect(() => quoteCallSync({ ledger, caps: () => caps() }, "creative_generate_music", args, call("m"))).toThrow("PRICE_UNKNOWN")
       // Not in `ESTIMATE_TOOLS`, so ElevenLabs is not asked for a price it has no flag to give.
-      expect({ args: Object.keys(args).join("+"), asked, daily: ledger.daily() }).toEqual({ args: Object.keys(args).join("+"), asked: [], daily: 0 })
+      expect({ args: Object.keys(args).join("+"), daily: ledger.daily() }).toEqual({ args: Object.keys(args).join("+"), daily: 0 })
     }
   })
 
   test("the refusal for a tool with no estimate says so, and its next step is the caps", async () => {
     // A tool this table classifies as spending, whose live schema declares no `estimate_only`: the refusal names the
     // flag it does not accept, because there is a schema here to say so.
-    const failure = await refusal(quoteCall({ ledger: new Ledger(), caps: () => caps() }, "creative_design_voice", { voice_description: "a warm alto" }, call("m")))
+    const failure = await refusal(() => quoteCallSync({ ledger: new Ledger(), caps: () => caps() }, "creative_design_voice", { voice_description: "a warm alto" }, call("m")))
     expect(failure.message).toContain(`does not accept "estimate_only"`)
     expect(failure.nextStep).toContain(`Set both "sessionCreditCap" and "dailyCreditCap" to null`)
     // A name the table does not classify at all gets the other shape: nothing here knows whether it spends.
-    const unknown = await refusal(quoteCall({ ledger: new Ledger(), caps: () => caps() }, "creative_generate_music", { music_length_ms: 300_000 }, call("m")))
+    const unknown = await refusal(() => quoteCallSync({ ledger: new Ledger(), caps: () => caps() }, "creative_generate_music", { music_length_ms: 300_000 }, call("m")))
     expect(unknown.message).toContain("is not in this plugin's tool table")
     expect(unknown.nextStep).toContain("wait for a release that classifies it")
     // And with both caps off there is nothing to price either against, so each runs untracked rather than refused.
     for (const name of ["creative_design_voice", "creative_generate_music"]) {
-      const untracked = await quoteCall({ ledger: new Ledger(), caps: () => caps(null, null) }, name, { music_length_ms: 300_000 }, call("m"))
+      const untracked = quoteCallSync({ ledger: new Ledger(), caps: () => caps(null, null) }, name, { music_length_ms: 300_000 }, call("m"))
       expect({ name, tracked: untracked.tracked }).toEqual({ name, tracked: false })
     }
   })
@@ -274,33 +253,9 @@ describe("two locations on one data directory", () => {
     expect(restarted.daily()).toBe(2_400)
   })
 
-  test("a path that can await decides from the store, so the second location is refused", async () => {
-    // d107a11 decided from this process's memory alone: the second location saw nothing and spent the cap again.
-    const store = sharedStore()
-    const first = knowing(new Ledger({ storage: store.handle() }))
-    const second = knowing(new Ledger({ storage: store.handle() }))
-    await Promise.all([first.hydrate(), second.hydrate()])
-    await quoteCall({ ledger: first, caps: small }, "creative_generate_speech", { ...SPEECH }, guardCall("a"))
-    await first.flush()
-    await expect(quoteCall({ ledger: second, caps: small }, "creative_generate_speech", { ...SPEECH }, guardCall("b"))).rejects.toMatchObject({
-      code: "SPEND_CAP_REACHED",
-    })
-  })
-
-  test("the hold is in the store before the call is dispatched, so a crash cannot lose it", async () => {
-    const store = sharedStore()
-    const ledger = knowing(new Ledger({ storage: store.handle() }))
-    await ledger.hydrate()
-    await quoteCall({ ledger, caps: small }, "creative_generate_speech", { ...SPEECH }, guardCall("a"))
-    // The process dies here, with the generation already running. A restart reads only what the store holds.
-    const restarted = new Ledger({ storage: store.handle() })
-    await restarted.hydrate()
-    expect(restarted.daily()).toBe(1_200)
-  })
-
-  test("the synchronous path still writes its hold, one tick behind the dispatch", async () => {
-    // The residual leaves open: the shared shaper contract is synchronous, so the script path cannot await the
-    // store before the call goes out. SECURITY.md and the README say so.
+  test("the synchronous path writes its hold, one tick behind the dispatch", async () => {
+    // The shared shaper contract is synchronous, so the script path cannot await the store before the call goes out.
+    // SECURITY.md and the README say so.
     const store = sharedStore()
     const ledger = knowing(new Ledger({ storage: store.handle() }))
     await ledger.hydrate()
@@ -444,7 +399,7 @@ describe("the money gate folds case, as the permission gate does", () => {
       expect({ name, estimable: priced(name) }).toEqual({ name, estimable: true })
       const ledger = new Ledger()
       ledger.rememberPrice("creative_generate_speech", input, { credits: 3_000, basis: "exact", parts: [] })
-      const { price } = await quoteCall({ ledger, caps: () => caps() }, name, { ...input }, call(name))
+      const { price } = quoteCallSync({ ledger, caps: () => caps() }, name, { ...input }, call(name))
       expect({ name, credits: price.credits }).toEqual({ name, credits: 3_000 })
     }
   })
@@ -456,16 +411,6 @@ describe("the money gate folds case, as the permission gate does", () => {
     // At d107a11 this reserved nothing at all: the call went out and the session spent 0.
     shapers.input("Creative_Generate_Speech", priceKnown(ledger, 3_000), call)
     expect(ledger.spend("ses_a").sessionCredits).toBe(3_000)
-  })
-
-  test("the prefix folds case, and only this plugin's own entry is stripped", () => {
-    expect(toolOf("elevenlabs_creative_generate_speech")).toBe("creative_generate_speech")
-    // d107a11 returned undefined for both of these, so both hooks returned before the guard.
-    expect(toolOf("ELEVENLABS_creative_generate_speech")).toBe("creative_generate_speech")
-    expect(toolOf("elevenlabs_Creative_Generate_Speech")).toBe("creative_generate_speech")
-    // A second entry under another name is a different server to OpenCode: the caps do not reach it, and status says so.
-    expect(toolOf("elevenlabs2_creative_generate_speech")).toBeUndefined()
-    expect(toolOf("notelevenlabs_creative_generate_speech")).toBeUndefined()
   })
 
   test("a second entry at ElevenLabs' address is found, and never changed", () => {
@@ -483,19 +428,19 @@ describe("the money gate folds case, as the permission gate does", () => {
 
   test("status names the second entry and offers to remove it, while a cap is on", () => {
     const facts = {
-      host: { version: "2.2.6", range: ">=2.2.3 <2.4.0", tested: true },
+      host: { version: "2.4.1", range: ">=2.4.1 <2.5.0", tested: true },
       server: { status: "connected" as const },
       source: { type: "plugin" as const, url: REGIONS.global },
       tools: ["creative_generate_speech"],
       spend: { dailyCredits: 0, sessionCap: 2_000, dailyCap: 10_000 },
     }
     const named = formatStatus(buildStatus({ ...facts, otherServers: ["elevenlabs2"] }))
-    expect(named).toContain("mcp.servers.elevenlabs2 also points at ElevenLabs and is outside these caps")
-    expect(named).toContain("Next step: mcp.servers.elevenlabs2 also points at ElevenLabs, and this plugin's credit caps do not bind calls to it.")
+    expect(named).toContain("mcp.servers.elevenlabs2 also points at ElevenLabs and is outside the tools-RPC caps")
+    expect(named).toContain("Next step: mcp.servers.elevenlabs2 also points at ElevenLabs, and this plugin's tools-RPC caps do not bind calls to it.")
     expect(formatStatus(buildStatus(facts))).toContain("Next step: Nothing to do.")
     // With no cap there is nothing to be outside of, so it is named without becoming the next step.
     const uncapped = buildStatus({ ...facts, otherServers: ["elevenlabs2", "voice"], spend: { dailyCredits: 0, sessionCap: null, dailyCap: null } })
-    expect(formatStatus(uncapped)).toContain("mcp.servers.elevenlabs2 and mcp.servers.voice also point at ElevenLabs and are outside these caps")
+    expect(formatStatus(uncapped)).toContain("mcp.servers.elevenlabs2 and mcp.servers.voice also point at ElevenLabs and are outside the tools-RPC caps")
     expect(uncapped.nextStep).toBe("Nothing to do.")
   })
 })
@@ -561,33 +506,22 @@ describe("folded credits age from when they were spent", () => {
   test("a folded total keeps its own hour through the store", async () => {
     const store = new Map<string, unknown>()
     const storage = storageOver(store)
-    store.set(LEDGER_KEY, {
-      entries: [],
-      holds: [],
-      // One bucket in hour 0, and a total written before the buckets, stamped half past hour 1.
-      rolled: [
-        { at: 0, credits: 400, sessionID: "ses_a" },
-        { at: HOUR + 30 * 60 * 1_000, credits: 200, sessionID: "ses_b" },
-      ],
-    })
+    // An hourly total in the append-only format: one writer's hour, per session. It ages from the hour it names.
+    store.set("spend/writer-a/h/0", { at: 0, sessions: { ses_a: 400, ses_b: 200 } })
     let now = 3 * HOUR
-    const ledger = new Ledger({ storage, now: () => now })
+    const ledger = new Ledger({ storage, writerId: "writer-b", now: () => now })
     await ledger.hydrate()
-    ledger.record("ses_a", 7, 3 * HOUR)
-    await ledger.flush()
-    expect(ledger.daily()).toBe(607)
-    now = 25 * HOUR + 45 * 60 * 1_000
-    // Hour 0's total has aged out. The one stamped mid-hour was read back as hour 1's bucket, so it is kept while any
-    // minute of that hour is in the window: d107a11 aged it from 01:30 and had already dropped it here. Rounding down
-    // only ever lengthens the window a stored total had, which is the side a cap must err on.
-    expect(ledger.daily()).toBe(207)
-    // A separate storage object is a separate book: this ledger starts empty and learns the buckets from the store.
-    const second = new Ledger({ storage: storageOver(store), now: () => now })
+    expect(ledger.daily()).toBe(600)
+    expect(ledger.spend("ses_b").sessionCredits).toBe(200)
+    // Kept while any minute of hour 0 is inside the window, and dropped once the hour has aged out.
+    now = 24 * HOUR + 30 * 60 * 1_000
+    expect(ledger.daily()).toBe(600)
+    now = 25 * HOUR + 1
+    expect(ledger.daily()).toBe(0)
+    // A separate storage object is a separate book: this ledger starts empty and learns the bucket from the store.
+    const second = new Ledger({ storage: storageOver(store), writerId: "writer-c", now: () => now })
     await second.hydrate()
-    expect(second.daily()).toBe(207)
-    expect(second.spend("ses_b").sessionCredits).toBe(200)
-    now = 26 * HOUR + 1
-    expect(second.daily()).toBe(7)
-    expect(second.daily()).toBe(ledger.daily())
+    expect(second.daily()).toBe(0)
+    expect(second.spend("ses_b").sessionCredits).toBe(0)
   })
 })

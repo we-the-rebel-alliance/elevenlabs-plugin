@@ -343,9 +343,7 @@ function parseJson(text: string): unknown {
 // most one call's reservation; a settled charge is never lost.
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The single record this plugin wrote before the ledger became append-only. Read and counted, never written again. */
-export const LEDGER_KEY = "spend.ledger"
-/** Every ledger key sits under this prefix, so one scan reads the whole book. `spend.ledger` sorts before it. */
+/** Every ledger key sits under this prefix, so one scan reads the whole book. */
 export const SPEND_PREFIX = "spend/"
 const WINDOW_MS = 24 * 60 * 60 * 1000
 /** A hold still open after this is settled at the reserved price. Ten minutes is inside a long video; expiry must not free the budget. */
@@ -390,11 +388,6 @@ interface Folded {
   bySession: Map<string, number>
 }
 
-/** What the pre-append-only record still contributes. Counted while it is in the window; never written. */
-interface Legacy {
-  rows: Array<{ at: number; credits: number; sessionID: string; hourly: boolean }>
-}
-
 interface Book {
   /** This book's name in the store. Every key it writes starts with it, and no other book writes those keys. */
   writerId: string
@@ -406,7 +399,6 @@ interface Book {
   others: Map<string, Row>
   /** The other writers' folded hours, by full key. Summed with this book's: no two writers share an hour's key. */
   otherFolded: Map<string, Folded>
-  legacy: Legacy
   chain: Promise<void>
 }
 
@@ -419,7 +411,6 @@ const emptyBook = (writerId: string): Book => ({
   folded: new Map(),
   others: new Map(),
   otherFolded: new Map(),
-  legacy: { rows: [] },
   chain: Promise.resolve(),
 })
 
@@ -470,7 +461,7 @@ interface LedgerInput {
   readonly writerId?: string
 }
 
-/** The ledger both paths share: the model's hooks and a script's shapers reserve, settle and record the same totals. */
+/** The ledger the tools-RPC shapers use to reserve, settle and record their totals. */
 export class Ledger {
   private readonly local: Book
   private readonly writerId: string
@@ -540,7 +531,6 @@ export class Ledger {
       }
       book.others = others
       book.otherFolded = otherFolded
-      book.legacy = parseLegacy(await storage.get(LEDGER_KEY))
     })
   }
 
@@ -689,7 +679,6 @@ export class Ledger {
     book.folded.clear()
     book.others.clear()
     book.otherFolded.clear()
-    book.legacy = { rows: [] }
     this.remembered.clear()
   }
 
@@ -731,13 +720,6 @@ export class Ledger {
       if (folded.at + BUCKET_MS >= horizon) continue
       book.otherFolded.delete(key)
       this.store(this.removeKey(book, key))
-    }
-    if (book.legacy.rows.length > 0) {
-      const live = book.legacy.rows.filter((row) => (row.hourly ? row.at + BUCKET_MS >= horizon : row.at >= horizon))
-      if (live.length === 0) {
-        book.legacy = { rows: [] }
-        this.store(this.removeKey(book, LEDGER_KEY))
-      } else book.legacy = { rows: live }
     }
     const excess = book.own.size - MAX_ENTRIES
     if (excess <= 0) return
@@ -827,7 +809,7 @@ export class Ledger {
   }
 }
 
-/** Every live row, every live folded hour and whatever the old record still holds, added up. No figure is taken over another. */
+/** Every live row and every live folded hour, added up. No figure is taken over another. */
 function total(book: Book, sessionID: string | undefined, now: number): number {
   const horizon = now - WINDOW_MS
   const mine = (id: string) => sessionID === undefined || id === sessionID
@@ -836,10 +818,6 @@ function total(book: Book, sessionID: string | undefined, now: number): number {
   for (const row of book.others.values()) if (row.at >= horizon && mine(row.sessionID)) sum += row.credits
   for (const [hour, bySession] of book.folded) if (hour + BUCKET_MS >= horizon) sum += hourTotal(bySession, sessionID)
   for (const folded of book.otherFolded.values()) if (folded.at + BUCKET_MS >= horizon) sum += hourTotal(folded.bySession, sessionID)
-  for (const row of book.legacy.rows) {
-    const live = row.hourly ? row.at + BUCKET_MS >= horizon : row.at >= horizon
-    if (live && mine(row.sessionID)) sum += row.credits
-  }
   return sum
 }
 
@@ -866,32 +844,6 @@ function parseHour(value: unknown): Map<string, number> | undefined {
     if (typeof credits === "number" && Number.isFinite(credits)) bySession.set(sessionID, credits)
   }
   return bySession
-}
-
-/**
- * The record written before the ledger became append-only: its charges, its holds and its folded totals, read as rows
- * that still count. A total written before the hourly keys holds the newest folded charge's own time; rounding it to
- * its hour only ever lengthens the window it had, which is the side a cap must err on.
- */
-function parseLegacy(stored: unknown): Legacy {
-  const rows: Legacy["rows"] = []
-  const take = (value: unknown, hourly: boolean) => {
-    if (!Array.isArray(value)) return
-    for (const item of value) {
-      if (item === null || typeof item !== "object") continue
-      const row = item as Record<string, unknown>
-      if (typeof row.at !== "number" || typeof row.credits !== "number" || typeof row.sessionID !== "string") continue
-      rows.push({ at: hourly ? bucketOf(row.at) : row.at, credits: row.credits, sessionID: row.sessionID, hourly })
-    }
-  }
-  if (Array.isArray(stored)) take(stored, false)
-  else if (stored !== null && typeof stored === "object") {
-    const record = stored as Record<string, unknown>
-    take(record.entries, false)
-    take(record.holds, false)
-    take(record.rolled, true)
-  }
-  return { rows }
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -1037,7 +989,7 @@ export function estimatePrice(
  */
 export const isEstimate = (tool: string, input: Record<string, unknown>) => ESTIMATE_TOOLS.includes(tool.toLowerCase()) && input.estimate_only === true
 
-/** The layer between a hook and the plugin: what the model path and the script path both ask. */
+/** The layer between a shaper and the plugin: what a tools-RPC call asks. */
 interface GuardCall {
   readonly sessionID: string
   readonly agent: string
@@ -1049,8 +1001,6 @@ interface GuardCall {
 interface GuardInput {
   readonly ledger: Ledger
   readonly caps: () => Caps
-  /** The server's own estimate, for a tool that accepts `estimate_only`. Only the model path can await it. */
-  readonly estimate?: (tool: string, input: Record<string, unknown>, call: GuardCall) => Promise<Price | undefined>
 }
 
 interface Quote {
@@ -1088,19 +1038,12 @@ export function isEstimateResult(result: { readonly output?: unknown; readonly t
 }
 
 /**
- * Prices a call, clamps its generation count, and reserves the price before it is sent. The reservation is what makes a
- * parallel turn safe: the check and the hold happen with no await between them.
- *
- * The model path awaits a real `estimate_only` call for image and video, once, and remembers the price for the arguments;
- * the script path is synchronous and can only use the table or a price the script itself fetched. Both refuse rather
- * than guess.
+ * Prices a call through the tools RPC's synchronous shaper, clamps its generation count, and reserves the price before
+ * it is sent. The reservation is what makes a parallel turn safe: the check and the hold happen with no await between
+ * them. This path cannot await ElevenLabs for an estimate: the only price it has is one a call on this ledger already
+ * fetched for exactly these arguments, so a script prices its own call by sending `estimate_only` first.
  */
-export async function quoteCall(input: GuardInput, tool: string, args: Record<string, unknown>, call: GuardCall): Promise<Quote> {
-  return quote(input, tool, args, true, call)
-}
-
-/** The synchronous form, for a path that cannot await: the tools RPC's shapers. */
-export function quoteCallSync(input: Omit<GuardInput, "estimate">, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
+export function quoteCallSync(input: GuardInput, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
   return quoteSync(input, tool, args, call)
 }
 
@@ -1157,40 +1100,7 @@ function estimateRefused(tool: string, obstacle: string) {
   )
 }
 
-async function quote(context: GuardInput, tool: string, args: Record<string, unknown>, mayEstimate: boolean, call: GuardCall): Promise<Quote> {
-  const free = unpriced(context, tool, args)
-  if (free !== undefined) return free
-  const caps = context.caps()
-  // No cap: no estimate is sent and nothing is refused, clamped or reserved. The result alone sets the cost line.
-  if (!capped(caps)) return { price: UNPRICED, tracked: false }
-  // An argument no allowlist has is refused before the estimate is asked for, not after: the estimate answers for the
-  // arguments it is sent, so an argument the server's own schema does not have would be priced around rather than
-  // priced. It is also one fewer flow created in the workspace for a call that is going to be refused.
-  // A count that cannot be read multiplies whatever one generation costs by an unknown, so no price for these
-  // arguments means anything — whoever it came from. Checked here rather than only inside `estimatePrice`, so a price
-  // this ledger already holds cannot carry a call past it either.
-  const obstacle = priceObstacle(tool, args)
-  if (obstacle !== undefined) throw unknownPrice(tool, priced(tool), obstacle)
-  // A remembered estimate is ElevenLabs' own figure for exactly these arguments, minutes old at most. Using it first
-  // is not only cheaper: every estimate creates a flow and a node in the workspace, so a second one for the same
-  // arguments leaves a second flow behind to say what the first already said.
-  let price = context.ledger.rememberedPrice(tool, args)
-  if (price === undefined && mayEstimate && priced(tool) && context.estimate) {
-    price = await context.estimate(tool, args, call)
-    if (price) context.ledger.rememberPrice(tool, args, price)
-  }
-  if (price === undefined || !(price.credits > 0)) throw unknownPrice(tool, priced(tool), priceObstacle(tool, args))
-  // This path can await, so it decides from the store rather than from this process's memory: a charge another
-  // location or another OpenCode recorded is merged in first. The check and the hold inside `reserve` stay
-  // synchronous, so nothing slips between them.
-  await context.ledger.refresh()
-  price = clamp(price, caps, args, context.ledger.spend(call.sessionID))
-  // The hold is in the store before the call is dispatched, so a crash cannot lose a reservation for a call that ran.
-  await context.ledger.reserve(call.id, call.sessionID, price.credits, caps)
-  return { price, tracked: true }
-}
-
-function quoteSync(context: Omit<GuardInput, "estimate">, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
+function quoteSync(context: GuardInput, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
   const free = unpriced(context, tool, args)
   if (free !== undefined) return free
   const caps = context.caps()

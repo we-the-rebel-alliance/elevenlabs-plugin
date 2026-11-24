@@ -121,8 +121,9 @@ opencode api post /api/rpc/elevenlabs.tools/describe -H "x-opencode-directory:$P
 
 ## Spending in a script
 
-A script's calls count against the same rolling 24-hour ledger the model's do. Nineteen methods can spend, and every one
-of them is a change: under `access: "read-only"` all nineteen are denied, `creative_transcribe_audio` included.
+A script's priced calls count against the rolling 24-hour ledger; a model's direct call is not priced by this plugin.
+Nineteen methods can spend, and every one of them is a change: under `access: "read-only"` all nineteen are denied,
+`creative_transcribe_audio` included.
 
 - **The price is ElevenLabs'.** It is the answer to the same call with `estimate_only: true`, which a script sends
   itself; under a cap the plugin needs one before each paid call. Seven of the nineteen take `estimate_only`; the other
@@ -156,7 +157,7 @@ opencode api post /api/rpc/elevenlabs.tools/creative_generate_image -H "x-openco
 
 Under a cap, a paid call with no price and no remembered estimate is refused `PRICE_UNKNOWN`, with no generation and
 no charge, and a paid call whose price does not fit is refused `SPEND_CAP_REACHED`, also with no generation. Both refusals name the
-option to change. Every paid result carries a `cost` object beside its output:
+option to change. Every priced tools-RPC result carries a `cost` object beside its output:
 
 ```json
 { "credits": 762, "basis": "exact", "sessionSpent": 762, "dailySpent": 762, "sessionCap": null, "dailyCap": null }
@@ -309,5 +310,5 @@ contract's own codes:
 - Keep a generated file without the `external_directory` rule, which is a path rule and not a permission on the tool.
 
 A script's calls write nothing to the session, and OpenCode's `execute.before` and `execute.after` tool hooks, from any
-plugin, do not run for them. The tools RPC applies the same spending guard itself, through its own shapers, so a script
-is charged and capped exactly as a model's call is.
+plugin, do not run for them. The tools RPC applies its own spending guard through its shapers, so a script's priced
+calls are charged and capped; a model's direct call is not priced by this plugin.

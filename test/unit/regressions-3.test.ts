@@ -16,7 +16,6 @@ import {
   NOT_A_COUNT,
   PRICED_ARGUMENTS,
   priceObstacle,
-  quoteCall,
   quoteCallSync,
   RESERVATION_MS,
   settlementOf,
@@ -442,33 +441,6 @@ describe("every priced tool has an argument allowlist, taken from its own live s
     }
   })
 
-  test("the server's own estimate does not price around an unknown argument either", async () => {
-    // The estimate answers for the arguments it is sent, and this is one whose effect nothing here knows, so it is
-    // not sent at all — one fewer flow left behind in the workspace for a call that is going to be refused.
-    const ledger = new Ledger()
-    let asked = 0
-    const estimate = async (tool: string, input: Record<string, unknown>) => {
-      asked += 1
-      return estimatePrice(tool, input, { output: { credits: 60 } })
-    }
-    const call = { sessionID: "ses_a", agent: "build", messageID: "m1", id: "c3" }
-    const refused = await quoteCall(
-      { ledger, caps: () => caps(), estimate },
-      "creative_generate_image",
-      { prompt: "a cat", model_id: "model_example", reference_image_url_count: 2 },
-      call,
-    ).then(
-      () => undefined,
-      (error: unknown) => error as SpendRefused,
-    )
-    expect({ code: refused?.code, asked }).toEqual({ code: "PRICE_UNKNOWN", asked: 0 })
-    // Without it the estimate prices the call, once, and the figure is remembered for the paid call that follows.
-    const quoted = await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_image", { prompt: "a cat", model_id: "model_example" }, { ...call, id: "c4" })
-    expect({ credits: quoted.price.credits, asked }).toEqual({ credits: 60, asked: 1 })
-    const again = await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_image", { prompt: "a cat", model_id: "model_example" }, { ...call, id: "c5" })
-    expect({ credits: again.price.credits, asked }).toEqual({ credits: 60, asked: 1 })
-  })
-
   test("the same calls run with both caps off", () => {
     // A cap is what makes an unknown argument a refusal: with no cap there is no bound to be wrong about.
     for (const [tool, input] of UNKNOWN_ARGUMENT_CALLS) {
@@ -640,18 +612,6 @@ describe("one key per record, one writer per key, so no settled charge is lost",
     }
   })
 
-  test("a hold whose key never reaches the store refuses the call rather than spending", async () => {
-    const stored = new Map<string, unknown>()
-    const storage = { ...storageOver(stored), set: async () => void (await Promise.reject(new Error("disk full"))) }
-    const ledger = new Ledger({ storage, now: () => 0 })
-    await ledger.hydrate()
-    await expect(
-      quoteCall({ ledger, caps: () => limits }, "creative_generate_speech", priceKnown(ledger, 600), { sessionID: "ses_a", agent: "build", messageID: "m1", id: "a" }),
-    ).rejects.toMatchObject({ code: "SPEND_CAP_REACHED" })
-    // The hold came back out of memory with it, so a refused call does not eat the budget either.
-    expect(ledger.daily()).toBe(0)
-  })
-
   test("a day of charges leaves a bounded number of keys, read over as many pages as it takes", async () => {
     const store = sharedStore()
     let now = 0
@@ -747,7 +707,7 @@ describe("the documented residual is what the ledger now does", () => {
   const RESIDUAL =
     "within one OpenCode the caps are exact; across OpenCodes a cap is crossed by at most one call's reservation for each one deciding before its read of the others' holds lands, so eight of them at 3,000 credits a call can spend 31,000 against a 10,000 cap; every OpenCode reads the store behind each call it admits and every five seconds besides, so none decides on a book older than that; a settled charge is never lost"
 
-  for (const file of ["README.md", "SECURITY.md", "docs/architecture.md"]) {
+  for (const file of ["SECURITY.md", "docs/architecture.md"]) {
     test(`${file} states the residual exactly`, () => {
       const prose = readFileSync(join(ROOT, file), "utf8").replace(/\*\*/g, "").replace(/\s+/g, " ")
       expect(prose).toContain(RESIDUAL)

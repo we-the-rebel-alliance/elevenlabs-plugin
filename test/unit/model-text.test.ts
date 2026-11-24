@@ -32,26 +32,30 @@ const atAll = (text: string) =>
 describe("the model-facing text at access all", () => {
   const all = {
     "the Code Mode namespace": NAMESPACE_DESCRIPTION,
-    "the Jelly summary": (JSON.parse(read("package.json")) as { jelly?: { summary?: string } }).jelly?.summary ?? "",
+    "the legacy declaration's summary": (JSON.parse(read("package.json")) as { jelly?: { summary?: string } }).jelly?.summary ?? "",
     // The plugin's own tool description, which the model reads before it saves a file.
     "the save tool's description": saveDescription("~/Downloads/elevenlabs"),
     ...Object.fromEntries(readdirSync(join(ROOT, "skills")).map((name) => [`skills/${name}/SKILL.md`, read(`skills/${name}/SKILL.md`)] as const)),
   }
+
+  test("the namespace line is within the fixed-context budget", () => {
+    expect(NAMESPACE_DESCRIPTION.length).toBeLessThanOrEqual(400)
+  })
 
   test.each(Object.entries(all))("%s claims nothing the default block contradicts", (_file, text) => {
     for (const [claim, pattern] of STALE) expect({ claim, hit: pattern.exec(atAll(text))?.[0] ?? null }).toEqual({ claim, hit: null })
   })
 
   // and the money the model is told about is the money the code charges.
-  test("the namespace text names every billed tool the table has, so the model is not misled", () => {
-    // The namespace text is prose: it must not promise a cost line for a product the table does not price, and must say
-    // that a billed read exists.
-    expect(NAMESPACE_DESCRIPTION).toContain("each paid call prints its cost")
-    // The model is told where a price comes from, because there is only one place it can come from.
-    expect(NAMESPACE_DESCRIPTION).toContain("estimate_only")
-    expect(NAMESPACE_DESCRIPTION).toContain("ElevenLabs is the only source of a price")
+  test("the namespace text covers every group that can spend, and where a price comes from", () => {
+    // Every billed tool is an agents_* or a creative_* one, so naming both groups covers the table without a tool list.
     expect(SPEND_TOOLS.length).toBeGreaterThanOrEqual(6)
-    for (const tool of SPEND_TOOLS) expect({ tool, named: NAMESPACE_DESCRIPTION.toLowerCase().includes(tool.split("_")[1]!.toLowerCase()) }).toEqual({ tool, named: true })
+    for (const tool of SPEND_TOOLS) expect({ tool, group: tool.split("_")[0] }).toEqual({ tool, group: expect.stringMatching(/^(?:agents|creative)$/) })
+    expect(NAMESPACE_DESCRIPTION).toContain("agents_*")
+    expect(NAMESPACE_DESCRIPTION).toContain("creative_*")
+    // The model is told how to get a price, because a generation is charged.
+    expect(NAMESPACE_DESCRIPTION).toContain("spend credits")
+    expect(NAMESPACE_DESCRIPTION).toContain("estimate_only prices one")
   })
 
   test("no status sentence claims a tool is off or asks under the default", () => {

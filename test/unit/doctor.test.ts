@@ -66,7 +66,7 @@ const facts = (overrides: Partial<DoctorFacts> = {}): DoctorFacts => ({
   conversations: "full",
   mediaRoot: "~/Downloads/elevenlabs",
   maxMediaBytes: 1024,
-  host: checkHost("2.2.3", false),
+  host: checkHost("2.4.1", false),
   spend: { dailyCredits: 1200, sessionCap: 2000, dailyCap: 10000 },
   skills: [
     { name: "elevenlabs", path: "/pkg/skills/elevenlabs/SKILL.md" },
@@ -86,7 +86,7 @@ describe("the doctor", () => {
     expect(report).toContain("ok   server: connected")
     expect(report).toContain("ok   tools: 1 listed")
     expect(report).toContain("ok   skills: 3 of 3 loaded")
-    expect(report).toContain("ok   spend: 1,200 credits in the last 24 hours of 10,000")
+    expect(report).toContain("ok   spend: 1,200 credits recorded from priced tools-RPC calls in the last 24 hours of 10,000")
     expect(report).toContain("balance: no API key added")
     expect(report).toContain("Everything checked out. Nothing to do.")
     expect(report).not.toContain("FAIL")

@@ -1,7 +1,7 @@
 # ElevenLabs for OpenCode
 
 Manage the voice and chat agents in your ElevenLabs workspace, review what callers said to them, and generate speech,
-images and video through ElevenLabs' official MCP server, from OpenCode.
+images and video through ElevenLabs' hosted MCP server, from OpenCode.
 
 Unofficial; not affiliated with ElevenLabs.
 
@@ -9,28 +9,31 @@ ElevenLabs is a trademark of Eleven Labs Inc.; this unofficial plugin is not end
 
 ## Requirements
 
-- OpenCode `>=2.2.3 <2.4.0`. Tested on 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2.
+- OpenCode `>=2.4.1 <2.5.0`. Tested on 2.4.1.
 - macOS or Linux.
 - An ElevenLabs account with a workspace. Generations spend that workspace's credits.
 
 ## Install
 
+Install from a release: `opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<version>`. The first release on plugin-contract is v0.0.0 (phase 4b).
+
 ```sh
-opencode plugin add github:joe-broadhead/opencode-elevenlabs#v0.0.10
+opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<version>
 ```
 
 Run `opencode reload`, or restart OpenCode, then run `/elevenlabs-status`.
 
-Each release has its own tag, and a Git install does not update by itself. To move to a newer release, remove the old entry with `opencode plugin remove github:joe-broadhead/opencode-elevenlabs#v0.0.9`, then add the new tag with `opencode plugin add github:joe-broadhead/opencode-elevenlabs#v<version>`.
+Each release has its own tag, and a Git install does not update by itself. To move to a newer release, remove the old
+entry with `opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v<old version>`, then add the new tag
+with `opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<version>`.
 
 Or add the plugin to `opencode.json` instead, with the same spec:
 
 ```json
-{ "plugins": [{ "package": "github:joe-broadhead/opencode-elevenlabs#v0.0.10" }] }
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>" }] }
 ```
 
 The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build.
-A new release is a new tag: install it with its own `#v<version>` spec.
 
 ## Sign in
 
@@ -43,8 +46,7 @@ OpenCode registers itself with the consent screen. Revoke the connection at any 
 ElevenLabs account settings.
 
 The consent is for seven scopes: `convai_read`, `convai_write`, `text_to_speech`, `speech_history_read`, `flows`,
-`image_video_generation` and `voice_generation`. ElevenLabs also advertises `ads_read`; this plugin never asks for it,
-because it has no advertising tool.
+`image_video_generation` and `voice_generation`. ElevenLabs also advertises `ads_read`; this plugin never asks for it.
 
 ## Use
 
@@ -56,611 +58,125 @@ Ask for what you want in your own words:
 - "Price a five-second video of a ceramic mug in morning light, tell me what it costs, then make it."
 - "Save that voiceover to my Downloads folder."
 
-One tool and one guard do more than relay ElevenLabs:
+Three skills tell the model when to reach for which part of the plugin: `elevenlabs` for agents, `elevenlabs-calls` for
+what callers said, and `elevenlabs-creative` for speech, images and video. Load the matching one first.
+
+One tool does more than relay ElevenLabs:
 
 - **`elevenlabs_save_media`** writes a generated file to disk from the signed link a generation returns. The link expires
   about two hours after the generation, so this is how a result is kept. It answers with the path, size, sha256 and, when
   the file states one, the duration; the file itself never enters the conversation.
-- **a spending guard** adds a cost line to every paid result. It prices a call first and refuses one that does not fit
-  only when you set a credit cap.
 
-A script can call the same tools with no model, under the same spending guard:
+A script can call the same tools with no model. The tools RPC prices, caps and annotates its calls in their own result;
+an agent or Code Mode call goes straight to ElevenLabs, whose own result stands:
 
 ```sh
 opencode api post /api/rpc/elevenlabs.tools/agents_list -H "x-opencode-directory:$PWD" -d '{"input":{"sessionID":"ses_…","input":{}}}'
 ```
 
-[docs/scripting.md](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/scripting.md) has the envelope,
-the estimate path and every refusal.
-
-### The conversations source
-
-The plugin declares a [source contract](https://github.com/we-the-rebel-alliance/source-contract) source,
-`elevenlabs.conversations`, and the list snapshot `elevenlabs.conversations.list`, so a collector such as Memory or a dashboard can read the workspace's calls without the
-model. `elevenlabs_events_list` (a tool, and an `events_list` method of the RPC above) lists the conversations the
-workspace's agents had since a cursor, oldest first, and `probe` names the sign-in.
-
-Each event is metadata only, because the callers are other people: the conversation's id, its start, the agent as its
-one actor, and a title of the agent's name with the call's direction, status and outcome, such as
-`Support Desk: inbound call, done, successful`. No caller's name or number, no transcript, summary, score or feedback,
-and no link. A conversation is listed once it is done or failed, or two hours after it started. Reading goes through
-three free reads only, so it spends no credits: `agents_list_conversations`, and, when a read starts more than a day
-back, `agents_list` and `agents_get` for each agent's retention. `conversations: "off"` turns it off. ElevenLabs names
-no account, so the owner is OpenCode's sign-in for ElevenLabs. `npm run conformance` runs the contract's kit offline
-and writes the report each release carries.
-
-ElevenLabs deletes an agent's conversations after its retention period, two years unless it is changed. A read that
-starts before the latest of those horizons answers `gap` (`expired`) once, then lists what survives. **An agent with
-retention 0, or in Zero Retention Mode, keeps no conversations: the source never sees its calls, and answers no gap for
-them.** Known limits below has the rest.
-
-`/elevenlabs-status` prints the connection, the account, the region, the spend, the tools and one next step.
-`/elevenlabs` opens the same report in a dialog. `/elevenlabs-doctor` makes the live checks a status report cannot.
+[docs/scripting.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/scripting.md) has the envelope, the estimate path and every refusal.
 
 ## Spending
 
 Generations are billed in **credits** against the workspace you signed in with.
 
-- **There is no credit cap unless you set one.** ElevenLabs already refuses a call the workspace's balance cannot pay
-  for, and the permission rules decide whether a paid call runs at all: under `access: "ask-changes"` every generation
-  asks, and under `"read-only"` it is denied. With the default options the plugin refuses, cuts and queues nothing for
-  money and sends no estimate before a paid call. Each paid result's cost line says what the result reported, or
-  `Credits: not reported`; it never shows a guess. To know a price first, ask for it: an `estimate_only` call.
-- **Caps are opt-in.** Set `sessionCreditCap`, `dailyCreditCap` or both to a whole number of credits to add a bound of
-  your own, counted over a rolling 24 hours across sessions, scripts and restarts. While either is set, a generation
-  that does not fit is refused **before it is sent**, a request for more variations than the budget affords is cut to
-  what fits, and the rest of this section's refusals apply.
-- **How far a cap reaches.** Every hold and every charge is written to this data directory's store under its own key,
-  which only the OpenCode that created it ever rewrites, and a total is read by scanning those keys and adding them up.
-  Nothing merges two writers' records, so no writer can drop another's charge. What a cap cannot do is decide across two
-  running OpenCodes at once: `ctx.storage` has no compare-and-set and no lock, so each admits a call against what it has
-  read. Exactly: **within one OpenCode the caps are exact; across OpenCodes a cap is crossed by at most one call's
-  reservation for each one deciding before its read of the others' holds lands, so eight of them at 3,000 credits a
-  call can spend 31,000 against a 10,000 cap; every OpenCode reads the store behind each call it admits and every five
-  seconds besides, so none decides on a book older than that; a settled charge is never lost.** The crossing needs
-  overlap: calls that wait for one another see one another, and those same eight, run one after the next, spend only
-  the 9,000 that fits. Size a cap as the bound you can afford to be crossed once per extra OpenCode, not as a hard
-  limit on the account. Two machines share nothing: the store cannot see them.
-- **Every price comes from ElevenLabs, never from this plugin.** There is no rate table here: no credits per character,
-  per second or per minute, and nothing measures a file on this machine. A price is ElevenLabs' answer to the **same
-  call with `estimate_only: true`**: you or the model can ask for one at any time, and while a cap is set the plugin
-  asks for one itself before each paid call. Nineteen tools can spend:
-  `creative_generate_speech`, `creative_generate_image`, `creative_generate_video`, `creative_edit_image`,
-  `creative_generate_in_flow`, `creative_run_flow_nodes`, `creative_transcribe_audio`, `creative_design_voice`,
-  `creative_execute_sandbox`, `agents_submit_batch_call`, `agents_retry_batch_call`, `agents_outbound_call`,
-  `agents_run_tests`, `agents_run_attached_tests`, `agents_generate`, `agents_generate_test_from_conversation`,
-  `agents_compute_kb_rag_index`, `agents_query_knowledge_base_rag` and `creative_create_brand_kit_from_website`. The
-  first seven take `estimate_only`; the other twelve do not, so they run unpriced, and while a cap you set is on they
-  are refused instead. The sandbox says it bills by the second, and the batch-call and outbound-call tools place real
-  phone calls. The rest are counted as spending because ElevenLabs' catalogue says neither way and the work they
-  describe — a test run's conversations, an LLM writing an agent or a test, embedding a document, running a RAG query,
-  reading a website — is work it plausibly bills, so each gets a cost line and, under a cap, counts against it.
-- **An estimate is free, but it is not nothing.** Measured against a real workspace: two estimates moved the balance by
-  zero credits, and each left a flow and a node behind in the workspace. That is why none is sent without a cap. Under a
-  cap, one estimate is asked per set of arguments,
-  the figure is kept for ten minutes, and the paid call reuses it instead of creating a second flow. The estimate is
-  sent only where the paid call could run: the permission it asks for is the generation's own, so nothing is estimated
-  if you say no, and under `access: "read-only"` every spending tool is denied and no estimate is sent either. The
-  plugin raises that permission twice for one paid call — before the estimate, and again for the generation — so under
-  `ask-changes` you may be prompted twice. Whether OpenCode folds the two into one prompt is OpenCode's to decide, and
-  no release has measured it yet.
-- **The figure is the whole batch.** ElevenLabs answers for every generation the call asks for, not for one — a
-  four-image estimate came back as 761.5151418103446 credits, about 190 an image. Credits are charged as whole numbers,
-  so a fractional figure is rounded up. Under a cap, a batch that does not fit is cut to the number of generations the
-  budget affords, and a call that named no count is refused whole rather than quietly given a smaller batch.
-- **With no cap, nothing is priced first and nothing is refused.** A cost line reads `Credits: not reported` unless the
-  result reports a figure. **With a cap, a call that cannot be priced is refused, not guessed.** Only when you set a cap: each of the 19 tools that can spend is priced by ElevenLabs' own estimate or refused PRICE_UNKNOWN before it is sent, and so is any name this table does not classify, whatever it starts with. With no cap, the default, nothing is refused for want of a price.
-  A failed or missing estimate, an argument ElevenLabs' own schema for that tool does not have, and a tool with no
-  estimate at all each end there. The refusal says what to do: send the same call with `estimate_only: true`, or set
-  both caps to `null`. A price of 0 is a refusal, not a free call.
-- **Transcription spends like everything else.** `creative_transcribe_audio` transcribes a node on a flow — it takes no
-  file and no path — and it is priced from its own estimate. It is **not** a read: `access: "read-only"` denies it along
-  with every other tool that can spend.
-- **Under a cap, two calls that start together cannot both spend the same budget.** The price is reserved in the ledger
-  before the call is sent and settled when its result arrives. A call that fails, or whose result never arrives, is
-  charged the reserved price: the plugin cannot tell a free failure from a billed one, and over-counting is the safe
-  side. A later result that reports a higher figure may replace that charge. A missing result, a zero, or an error does
-  not free the budget. A hold still open after ten minutes is settled at the reserved price rather than dropped. On the
-  script path, one priced call per session and method is in flight; a second is refused until the first settles. With
-  no cap none of this holds anything back: calls run side by side and each is recorded when its result arrives.
-- **Past a thousand priced calls in a day, the oldest ones are counted by the hour.** The detail log keeps the newest
-  1,000 charges; an older charge still inside the window is folded into a total for its session and the hour it was
-  spent in, which nothing afterwards can shrink. A folded total is kept while any minute of its hour is still inside the
-  24 hours, so a folded charge can go on counting for up to an hour after its own day ran out. The total errs high,
-  never low, and only on a day that busy.
-- **A cap bounds this plugin, not your account.** Someone generating in the ElevenLabs app spends from the same pool,
-  and so does a second MCP entry pointing at ElevenLabs under another name: its tools carry that name's prefix, which
-  this plugin's guard never sees. `/elevenlabs-status` names such an entry when it finds one.
-- **The balance is only visible with an API key.** Add one through `/connect` → **ElevenLabs API key (optional, balance only)** and
-  status shows the workspace balance and its reset date. It is used for one read, the subscription, and never to
-  generate. Without it the Spend row says the plugin counts its own calls only.
-- **A retry is a second charge.** The skills poll for a result instead of asking again.
-- **No dollar figure is derived from credits.** There is no published conversion; `cost_fiat`, when ElevenLabs reports
-  it, is the dollars.
+- **Priced tools-RPC calls are the only calls this plugin prices.** A script or app calls `elevenlabs.tools`; its
+  result carries a `cost` object and a cost line with the figure the result reported, or `Credits: not reported`. An
+  agent or Code Mode call is ElevenLabs' own result: the plugin does not price, cap or annotate it.
+- **Caps are opt-in.** There is no credit cap unless you set one. Set `sessionCreditCap`, `dailyCreditCap` or both to a whole number of
+  credits to bound priced tools-RPC calls. A call that does not fit is refused before it is sent, and a request for more
+  variations than the budget affords is cut to what fits. The cap does not bound an agent's direct call.
+- **A cap bounds this plugin's tools-RPC calls, not your account.** Another OpenCode, another tool, an agent's direct
+  call or ElevenLabs' own site is outside it.
+- **No dollar figure is derived from credits.**
+- Transcription spends like everything else, and `access: "read-only"` denies it along with every other tool that can
+  spend.
+- A batch or outbound call places real phone calls, and an agent update publishes live at once: confirm each with the
+  user first.
 
 ## Media and files
 
-Generated files are saved under `mediaRoot`, default `~/Downloads/elevenlabs`, created on the first save with mode 0700.
-Only a link on ElevenLabs' generated-file host is fetched, over `https`, with no redirect to any other host, and a file
-larger than `maxMediaBytes` (200 MB by default) is refused.
-
-That folder is outside your project, so **two rules apply**: the plugin's own permission, and OpenCode's
-`external_directory` rule for the folder. The plugin asserts both before it fetches anything, and its refusal prints the
-exact rule. To pre-approve the folder:
-
-```json
-{ "permissions": [
-  { "action": "elevenlabs_save_media", "resource": "*", "effect": "allow" },
-  { "action": "external_directory", "resource": "/absolute/path/of/your/mediaRoot/*", "effect": "allow" }
-] }
-```
-
-The second resource is the **absolute** path of `mediaRoot` followed by `/*`; a `~` is not expanded in a rule, so write
-the path out (`/absolute/path/...`, not `~/...`). A refusal that starts `permission.rejected: external_directory` or
-`EXTERNAL_DIRECTORY_DENIED` needs that second rule.
+`elevenlabs_save_media` writes under `mediaRoot` (default `~/Downloads/elevenlabs`), creating it on first use, and
+refuses a file larger than `maxMediaBytes` (default 200 MB). Both the tool's own rule and OpenCode's
+`external_directory` rule for that folder must allow the write; [docs/configuration.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/configuration.md) prints
+both.
 
 ## Regions
 
-ElevenLabs runs separate environments, and an isolated one is a separate workspace with a separate account.
+`region` chooses the hosted server. An isolated region is a separate workspace with a separate account, and changing
+the region needs a new sign-in.
 
 | `region` | Server |
 | --- | --- |
-| `global` (the default) | `https://api.elevenlabs.io/v1/mcp` |
+| `global` (default) | `https://api.elevenlabs.io/v1/mcp` |
 | `us` | `https://api.us.elevenlabs.io/v1/mcp` |
 | `eu` | `https://api.eu.residency.elevenlabs.io/v1/mcp` |
 | `in` | `https://api.in.residency.elevenlabs.io/v1/mcp` |
 | `sg` | `https://api.sg.residency.elevenlabs.io/v1/mcp` |
 
-The server address is part of the stored credential's key, so **changing `region` needs a new sign-in**: run `/connect`
-and choose **ElevenLabs** again (in Jelly, the card shows **Sign in again**). The earlier region's sign-in stays stored
-in OpenCode, unused. A plugin cannot delete a stored credential, so this one does the rest: it lists the old sign-in in
-`/connect` as **ElevenLabs, old `<region>` sign-in (not in use)**, where you can sign out of it, and `/elevenlabs-status`
-names it with the command that removes it, `opencode auth logout <its id>`. If your own `mcp.servers.elevenlabs` entry
-still points at the old region, status says so and gives one next step.
+A plugin cannot delete a stored credential, so a sign-in for an earlier region stays in OpenCode until you sign out of
+it. `/connect` lists it as "ElevenLabs, old `<region>` sign-in (not in use)", and `/elevenlabs-status` gives the
+`opencode auth logout` command.
+
+## Conversations
+
+The plugin declares the source `elevenlabs.conversations`: `elevenlabs_events_list` lists the conversations the
+workspace's agents had since a cursor, oldest first, metadata only, and `probe` names the sign-in. No caller's name or
+number, no transcript, summary, score or feedback. It reads only free tools, so it spends no credits.
+`conversations: "off"` turns it off. [docs/configuration.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/configuration.md) has the retention rules and every
+field.
 
 ## Permissions
 
-**Every tool is allowed by default.** An agent can read and change agents, delete them, read callers' transcripts, place
-phone calls through an agent, publish a change to every caller and
-spend your credits without asking, and so can a tool ElevenLabs adds later. Restrict it in any of these three ways.
+**Every tool is allowed by default.** An agent can read agents and calls, change agents, spend credits and delete
+things without a prompt. OpenCode offers three ways to restrict that, and the stricter one wins:
 
-1. **The `access` option**, which drives the default rules the plugin inserts:
+- **The `access` option**: `"all"` (the default), `"ask-changes"` or `"read-only"`. The plugin writes a default rule
+  block into every agent that has a base allow rule.
+- **An agent that is read-only or asks**: Explore is read-only, Plan cannot use ElevenLabs, and a `deny` in the agent's
+  own permissions wins.
+- **A rule per tool**: `permissions` in `opencode.json` or a session's own rules, such as a `deny` for
+  `elevenlabs_agents_delete`.
 
-   | Value | What runs | What asks |
-   | --- | --- | --- |
-   | `"all"` (the default) | every tool, spending included, and any tool ElevenLabs adds later | nothing |
-   | `"ask-changes"` | the read tools | everything else: creates, updates, deletes, signed links, phone calls, publishing and every generation |
-   | `"read-only"` | the read tools | nothing: everything else is **denied**, generations included |
-
-   **At the default `access: "all"` with no credit cap, an outbound or batch call runs without a prompt; set
-   `access: "ask-changes"` or a credit cap to stop that.**
-
-   ```json
-   { "plugins": [{ "package": "github:joe-broadhead/opencode-elevenlabs#v0.0.10", "options": { "access": "read-only" } }] }
-   ```
-
-2. **An agent that is read-only or asks**, with rules of its own, later than the plugin's:
-
-   ```json
-   { "agents": { "reader": { "permissions": [
-     { "action": "elevenlabs_*", "resource": "*", "effect": "ask" },
-     { "action": "elevenlabs_agents_list", "resource": "*", "effect": "allow" }
-   ] } } }
-   ```
-
-3. **A rule per tool**, with the exact names in the block below. To make one tool ask, or stop it:
-
-   ```json
-   { "permissions": [
-     { "action": "elevenlabs_creative_generate_video", "resource": "*", "effect": "deny" },
-     { "action": "elevenlabs_agents_delete", "resource": "*", "effect": "ask" }
-   ] }
-   ```
-
-The plugin inserts this block directly after each agent's base rule that allows everything, generated from
-`defaultRules("all")` in `src/permissions.ts`. It is the namespace rule plus one rule per live tool: 248 rules in all, so
-it is folded here:
-
-<details>
-<summary>The 248 rules <code>access: "all"</code> inserts</summary>
-
-```json
-[
-  { "action": "elevenlabs_*", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_account_get_usage", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_calculate_llm_usage", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_count_conversations", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_alert", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_batch_call", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_branch", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_branches_commit_status", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_config_summary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_connection_dependents", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_conversation", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_conversation_audio_url", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_conversation_summary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_insights_report", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_kb_dependents", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_kb_document", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_kb_rag_indexes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_knowledge_size", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_latest_bi_report", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_link", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_mcp_server", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_memory", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_merge_conflicts", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_merge_proposal", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_overview_dashboard", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_phone_number", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_procedure", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_procedure_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_pronunciation_dictionary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_rebase_conflicts", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_settings", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_structured_procedure_schema", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_subagent_dependents", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_summaries", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_test_result", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_test_result_summary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_test_run", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_test_run_failures", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_test_run_summary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_tool_dependents", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_tool_executions", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_topics", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_topics_summary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_triage_ticket", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_triage_ticket_assignable_users", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_usage_limits", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_version", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_whatsapp_account", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_widget", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_alerts", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_batch_calls", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_branches", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_channels", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_conversations", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_deployments", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_knowledge_base", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_llms", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_mcp_server_tools", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_mcp_servers", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_memories", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_merge_proposals", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_phone_numbers", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_procedures", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_pronunciation_dictionaries", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_secrets", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_test_runs", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_tests", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_tools", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_triage_tickets", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_trigger_connections", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_webhooks", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_list_whatsapp_accounts", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_merge_branch_preview", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_query_analytics", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_query_workspace_conversations", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_read_string_field", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_rebase_branch_preview", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_resolve_conversation", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_search_conversation_messages", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_search_knowledge_base", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_search_procedures", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_semantic_search_conversation_messages", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_suggest_merge_proposal_reviewers", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_available_assets", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_brand_kit", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_flow", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_flow_node", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_flow_node_types", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_flow_run_status", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_generations", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_guide", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_model_guide", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_model_schema", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_view_state", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_voice_design_previews", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_list_brand_kits", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_list_flows", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_list_voices", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_show_flow_results", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_events_list", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_probe", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_get_signed_url", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_add_pronunciation_dictionary_rules", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_add_triage_ticket_comment", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_add_triage_ticket_turn_comment", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_add_workflow_node", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_append_to_string_field", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_attach_kb_document", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_attach_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_attach_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_bulk_move_knowledge_base", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_cancel_batch_call", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_comment_on_merge_proposal", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_connect_workflow_nodes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_branch", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_code_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_deployment", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_kb_crawl", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_kb_folder", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_kb_text", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_kb_url", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_manual_triage_ticket", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_mcp_server", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_merge_proposal", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_phone_number", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_procedure", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_pronunciation_dictionary", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_secret", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_simulation_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_test_folder", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_create_triage_ticket", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_workflow_element", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_detach_kb_document", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_detach_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_detach_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_disable_built_in_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_duplicate", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_duplicate_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_edit_string_field", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_merge_branch", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_merge_merge_proposal", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_move_tests", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_publish_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_rebase_branch", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_remove_pronunciation_dictionary_rules", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_request_merge_proposal_review", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_review_merge_proposal", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_agent_behavior", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_analysis", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_branch", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_client_overrides", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_code_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_conversation", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_end_call_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_guardrails", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_kb_document", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_keypad_tone_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_language_detection_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_language_presets", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_mcp_server", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_merge_proposal", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_operations", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_phone_number", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_procedure_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_procedure_visibility", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_prompt_settings", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_secret", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_settings", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_skip_turn_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_speech_recognition", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_subagents", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_transfer_to_agent_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_transfer_to_number_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_triage_ticket", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_turn_taking", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_voice", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_voicemail_detection_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_whatsapp_account", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_widget", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_workflow", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_workflow_edge", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_update_workflow_node", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_add_brand_kit_item", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_add_flow_asset_node", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_add_flow_node", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_attach_reference_file", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_connect_flow_nodes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_create_asset_upload", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_create_brand_kit", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_create_flow", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_disconnect_flow_nodes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_duplicate_flow_nodes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_finalize_asset_upload", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_get_sandbox_run", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_save_designed_voice", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_save_view_state", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_update_brand_kit", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_update_brand_kit_item", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_update_flow_nodes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_update_node", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_upload_flow_reference", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_get_more_tools", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_compute_kb_rag_index", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_generate", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_generate_test_from_conversation", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_outbound_call", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_query_knowledge_base_rag", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_retry_batch_call", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_run_attached_tests", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_run_tests", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_submit_batch_call", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_create_brand_kit_from_website", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_design_voice", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_edit_image", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_execute_sandbox", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_generate_image", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_generate_in_flow", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_generate_speech", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_generate_video", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_run_flow_nodes", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_transcribe_audio", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_bulk_delete_knowledge_base", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_kb_document", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_mcp_server", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_phone_number", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_procedure", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_procedure_draft", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_test", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_tool", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_agents_delete_triage_ticket", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_delete_brand_kit", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_delete_brand_kit_item", "resource": "*", "effect": "allow" },
-  { "action": "elevenlabs_creative_delete_flow_nodes", "resource": "*", "effect": "allow" }
-]
-```
-
-</details>
-
-Everything later wins: an agent's own stricter rules (Explore cannot use ElevenLabs), your `permissions` in
-`opencode.json`, and your saved answers. In an unattended run such as `opencode run`, a tool that asks is refused:
-**run writes interactively**.
-
-### Calls and personal data
-
-A transcript holds another person's words, the identifier your integration gave them, their phone number, and whatever
-the agent was told to extract. **No redaction is applied**: the point of reading a call is what was said. Instead:
-
-- `conversations: "summary"` denies the transcript tools — `agents_get_conversation`, its summary, the two message
-  searches and `agents_get_conversation_audio_url`, which links the call's recording — and keeps the metadata reads.
-- `conversations: "off"` denies those and every other read of a call's history too: `agents_list_conversations`, the
-  counts, `agents_query_workspace_conversations` and the batch calls' recipient lists, and the source contract's
-  `events_list` (the conversations source below).
-
-The skills tell the model to summarise rather than quote, and never to move a caller's details anywhere else.
+`read-only` denies every tool that can spend, `creative_transcribe_audio` included. An unattended run such as
+`opencode run` refuses a tool that asks, so run writes interactively.
 
 ## Configure
 
-Options, the permission rules and every error code are in
-[docs/configuration.md](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/configuration.md).
+Options, the permission rules, the status rows and every error code are in [docs/configuration.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/configuration.md).
 
 ```json
-{ "plugins": [{ "package": "github:joe-broadhead/opencode-elevenlabs#v0.0.10", "options": {
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>", "options": {
   "access": "all",
   "region": "global",
+  "conversations": "full",
   "sessionCreditCap": null,
   "dailyCreditCap": null,
   "mediaRoot": "~/Downloads/elevenlabs",
-  "maxMediaBytes": 209715200,
-  "conversations": "full"
+  "maxMediaBytes": 209715200
 } }] }
 ```
 
-## Organisation rollout
-
-Pre-set the region, and a cap if you want one, in the system config, so every member only presses sign-in. On Linux
-`/etc/opencode/opencode.json`, on macOS `/Library/Application Support/opencode/opencode.json`:
-
-```json
-{
-  "plugins": [{
-    "package": "github:joe-broadhead/opencode-elevenlabs#v0.0.10",
-    "options": { "region": "eu", "dailyCreditCap": 5000, "access": "ask-changes" }
-  }]
-}
-```
-
-Nothing else needs configuring: there is no client ID to register and no secret to distribute.
-
 ## Troubleshooting
 
-Every state, and every sentence `/elevenlabs-status` and `/elevenlabs-doctor` can print, is in
-[docs/configuration.md](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/configuration.md). Run
-`/elevenlabs-doctor` first when something is wrong.
+Run `/elevenlabs-status` first, then `/elevenlabs-doctor` for the live checks a status report cannot make. Every state,
+its next step and the error codes are in [docs/configuration.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/configuration.md).
 
-| Code | What it means | What to do |
-| --- | --- | --- |
-| `BALANCE_UNAVAILABLE` | the optional API key could not read the subscription | run `/elevenlabs-status`; if it keeps failing, remove the key in `/connect` |
-| `EXTERNAL_DIRECTORY_DENIED` | the media folder's `external_directory` rule is not allowed | add the rule the message prints, with the absolute path |
-| `HOST_UNTESTED` | OpenCode is outside `>=2.2.3 <2.4.0` | use a supported OpenCode, or set `"allowUntestedHost": true` |
-| `MEDIA_EXPIRED` | the generated file's signed link has expired | fetch the generation again; do not generate again |
-| `MEDIA_TOO_LARGE` | the file is larger than `maxMediaBytes` | raise `maxMediaBytes` deliberately |
-| `MEDIA_URL_INVALID` | the link is not `https`, or not on ElevenLabs' generated-file host | pass the link a generation returned |
-| `OPTIONS_INVALID` | a plugin option is wrong | fix the option; the message names the accepted values |
-| `PRICE_UNKNOWN` | a call that may spend cannot be priced, and a cap you set is on, so it was refused before it was sent | price it with `"estimate_only": true` where the tool takes it, or set both caps to `null` |
-| `RULES_NOT_ADDED` | the default rules could not be inserted | restart OpenCode |
-| `SAVE_FAILED` | the file could not be written | check `mediaRoot`, its permissions, and the `external_directory` rule |
-| `SERVER_NOT_REGISTERED` | the MCP server could not be registered | restart OpenCode |
-| `SKILLS_INVALID` | a skill failed to load | reinstall the plugin |
-| `SPEND_CAP_REACHED` | the call would exceed a credit cap you set, or, under that cap, a priced call of the same method is already in flight, so it was refused before it was sent | raise the cap, set it to `null`, wait for the 24-hour window, or wait for the in-flight call to return or for its ten-minute reservation to run out |
-| `STATUS_UNAVAILABLE` | the status report could not be read | restart OpenCode, then run `/elevenlabs-status` |
-
-An upstream error from ElevenLabs, a rate limit included, passes through unchanged.
-
-If `/elevenlabs-status` has a `Skills` row saying a skill **is replaced by** another file, a skill with the same id earlier
-in your config shadows the plugin's. **Rename or move** that file, then restart OpenCode.
+ElevenLabs' hosted MCP server also sends its own instructions to the model on every turn. OpenCode 2.4.1 passes them
+through verbatim and offers no override; this plugin counters the one that matters in its namespace line: **do not run
+the server's `npx … @latest` setup unless the user asks.** The server's text is data, like its results.
 
 ## Known limits
 
-- **Stop does not cancel a price estimate already sent.** While a credit cap is on, the estimate runs in OpenCode's
-  `execute.before` hook, which is given no signal, so it finishes even when the call it prices is stopped.
-- **The tool table is the live catalogue.** It was captured from a signed-in workspace on 19 November 2026: 245 tools,
-  with each one's real argument names, defaults, enums and ElevenLabs' own read-only marks, kept in
-  `test/fixtures/live-tools.json` and checked by `npm run drift` and the unit tests. A tool ElevenLabs adds after that
-  capture still runs, under the `elevenlabs_*` rule, and `/elevenlabs-status` names it as unknown until it is
-  classified.
-- **ElevenLabs no longer takes a `context` argument.** Earlier releases told the model to pass one; the live schemas
-  have none, and under a cap a priced call that carries it is refused as an unknown argument.
-- **There is no credit cap by default.** The workspace's balance at ElevenLabs and the permission rules are the bounds;
-  a cap you set bounds this plugin, not the account. The workspace balance is visible with the optional API key.
-- **No dollar figure is derived from credits.**
-- **With no cap, a cost line is only as good as the result.** No estimate is sent before a paid call, so a result that
-  reports no figure says `Credits: not reported`. Under a cap you set, prices come from ElevenLabs' own estimate: a
-  call it cannot price is refused rather than guessed, and a tool ElevenLabs offers no estimate for cannot run.
-- **One fact about a paid call stays unverified until the live reconcile measures it:** whether a finished generation
-  reports what it really cost, and in which field of its result. Pass 1 did not measure it: it spent nothing. Pass 2
-  does, as step 2 of the checklist in `test/fixtures/README.md`, on the two cheapest paid calls this plugin can make.
-  Until then a call under a cap is recorded at its estimate, and a later figure can only raise that charge, never lower
-  it; with no cap, most cost lines may read `Credits: not reported`. What the live pass did settle is on the
-  estimate's side: an estimate moved the balance by nothing, its figure covers the whole batch rather than one
-  generation, it can be fractional, and it leaves a flow and a node behind in the workspace.
-- **Durations are read from the container, and only for display.** WAV and MP4/M4A state one; MP3, Ogg and WebM do not,
-  and the field is left out rather than estimated. A WAV holding more than one `data` chunk, or more than one `fmt `
-  chunk, states two durations, and real decoders disagree about which counts, so it is treated as stating none. No
-  price reads any of this.
-
-- **A region change cannot remove the earlier region's sign-in.** A plugin cannot delete a stored credential, so it
-  stays in OpenCode until you sign out of it: `/connect` lists it as "ElevenLabs, old `<region>` sign-in (not in use)",
-  and `/elevenlabs-status` gives the `opencode auth logout` command.
-- **Jelly's relay sign-in is not yet checked with ElevenLabs.** The declaration lets Jelly offer a browser tab its
-  relay for the sign-in, which relies on ElevenLabs accepting Jelly's client metadata document; no sign-in through
-  that path has been made yet. Signing in from OpenCode itself is unaffected.
-- In Jelly, the settings are drawn as choices and bounded numbers, which needs a Jelly that reads them: an older Jelly
-  refuses the plugin's whole declaration. Jelly saves no `null`, so a credit cap there is no cap by being left unset.
-- **The conversations source sees only what ElevenLabs still lists.**
-  - **Retention.** ElevenLabs' docs disagree on whether an agent's retention removes a conversation from the list or
-    only its transcript and audio: the [retention page](https://elevenlabs.io/docs/agents-platform/customization/privacy/retention) says "transcripts and audio recordings", the
-    [API reference](https://elevenlabs.io/docs/api-reference/agents/get) says `retention_days` is "the number of days to retain the conversation". The source takes the
-    conservative reading, that the conversation goes, and answers a `gap` for a read that starts before the latest
-    retention horizon among the agents. An agent that states no retention is taken at the two-year default.
-  - **One gap per read, for an hour.** A read that pages on within an hour of its gap answers no second one, so during
-    one continuous read up to an hour's worth of conversations at the horizon's edge can be deleted without a second
-    gap. A cursor used more than an hour after its gap is a new read: the horizon is checked again, and a pause never
-    hides what retention deleted.
-  - **Loss by design.** An agent with retention 0, or in Zero Retention Mode, keeps no conversations (ElevenLabs offers
-    them only to a post-call webhook). The source never sees them and answers no gap for them.
-  - **Deletions.** A conversation a person deletes, or one a shortened retention removes at once, cannot be told apart
-    from one that never happened: ElevenLabs offers no list of deletions. One deleted before it was listed is never
-    seen; one deleted after it was listed stays with the consumer. Answering that with `removals[]` needs consumers on
-    source-contract 0.2.0, and is not sent yet.
-  - **A deleted agent** cannot be read, so its retention is not part of the horizon.
-  - **Status.** A conversation still running or processing two hours after its start is listed with that status, and
-    never listed again when it finishes.
-  - **The owner is OpenCode's sign-in,** because ElevenLabs names no account: signing in again, even as the same
-    workspace, is a new owner, and a cursor from before it is refused. The owner will carry `verified: false`, and the
-    descriptor an empty `permission.identity`, once Memory and jelly are on source-contract 0.2.0; consumers on 0.1.x
-    refuse both.
-  - **No consent sentence.** The descriptor carries no `scope.describe` for the loss by design above: a descriptor whose
-    `scope` names no keys is refused by the contract's own descriptor schema, so this README and the tool's description
-    say it instead.
-- Updates are not automatic for a Git install, and `opencode plugin update` and `opencode plugin check` do not work on one: to move to a newer release, remove the old entry and add the new tag.
+- **The price comes from ElevenLabs.** A priced tools-RPC call ElevenLabs cannot price is refused rather than guessed
+  while a cap is on. Whether a finished generation reports what it really cost, and in which field, stays unverified
+  until it is measured.
+- **No cap means no pre-flight estimate.** The plugin sends no estimate for a tools-RPC call; a result that reports no
+  figure says `Credits: not reported`, and a script gets a price by sending `estimate_only` first.
+- **A region change cannot remove the earlier region's sign-in.** Sign out of it in `/connect` or with the command
+  status gives.
+- **Updates are not automatic for a Git install.** Move to a newer release by removing the old entry and adding the
+  new tag.
 
 ## Uninstall
 
@@ -670,17 +186,16 @@ earlier region, run the `opencode auth logout` command it gives as well:
 ```sh
 opencode mcp logout elevenlabs
 opencode auth list
-opencode plugin remove github:joe-broadhead/opencode-elevenlabs#v0.0.10
+opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v<version>
 ```
 
 Files already saved under `mediaRoot` stay. Remove them yourself if you no longer want them.
 
 ## Links
 
-- [Configuration, permission rules and error codes](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/configuration.md)
-- [Scripting](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/scripting.md)
-- [Architecture](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/architecture.md)
+- [Configuration, permission rules and error codes](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/configuration.md)
+- [Scripting](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/scripting.md)
+- [Architecture](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/architecture.md)
 - [ElevenLabs' hosted MCP server](https://elevenlabs.io/docs/eleven-agents/operate/hosted-mcp)
-- [ElevenLabs' MCP server overview](https://elevenlabs.io/docs/eleven-api/resources/mcp-server)
-- [CHANGELOG](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/CHANGELOG.md)
-- [LICENSE](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/LICENSE)
+- [CHANGELOG](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/CHANGELOG.md)
+- [LICENSE](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/LICENSE)

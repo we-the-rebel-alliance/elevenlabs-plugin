@@ -128,7 +128,7 @@ describe("events_list", () => {
     const source = setup()
     const page = await source.list({ since: SINCE })
     expect(resultProblems(page, 100, 65_536)).toEqual([])
-    expect(page).toMatchObject({ source: SOURCE, account: ACCOUNT, owner: OWNER, more: false, trust: "untrusted", plugin: "@joe-broadhead/opencode-elevenlabs" })
+    expect(page).toMatchObject({ source: SOURCE, account: ACCOUNT, owner: OWNER, more: false, trust: "untrusted", plugin: "@we-the-rebel-alliance/elevenlabs-plugin" })
     // conv_07 is still in progress and started 30 minutes ago, so the listing stops before it: conv_08 waits too.
     expect(page.events.map((event: any) => event.external_id)).toEqual(["conv_01", "conv_02", "conv_03a", "conv_03b", "conv_04", "conv_05", "conv_06"])
     expect(page.refused).toEqual([{ external_id: SECRET.conversation_id, reason: "secret", detail: expect.any(String) }])

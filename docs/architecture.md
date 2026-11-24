@@ -11,7 +11,7 @@ its own and has no runtime dependencies: the source contract's modules are bundl
 | Path | Role |
 | --- | --- |
 | `src/index.ts` | The server part: the plugin `elevenlabs` |
-| `src/plugin.ts` | Setup: the server, the namespace, the rules, the guard's hooks, the commands, the tools RPC |
+| `src/plugin.ts` | Setup: the server, the namespace, the rules, the commands and the tools RPC |
 | `src/constants.ts` | Ids, the region table, the scope pin, the media host, the host range, `TESTED_HOSTS` and the codes |
 | `src/options.ts` | Option parsing and validation |
 | `src/elevenlabs-tools.ts` | The one tool table: all 245 live tools — reads, export, writes, spending tools, deletes — the transcript lists, the tools that reach people, the read-only overrides and `classify()` |
@@ -38,7 +38,7 @@ place and keeps the modules it already loaded for unchanged paths. Only `@openco
 ## Setup
 
 1. `parseOptions` validates the options; anything wrong fails with `OPTIONS_INVALID`.
-2. `checkHost` compares `ctx.app.version` with `>=2.2.3 <2.4.0`. Inside it the plugin starts; status calls only 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2 tested. Outside it, setup fails with `HOST_UNTESTED` unless `allowUntestedHost` is set.
+2. `checkHost` compares `ctx.app.version` with `>=2.4.1 <2.5.0`. Inside it the plugin starts; status calls only 2.4.1 tested. Outside it, setup fails with `HOST_UNTESTED` unless `allowUntestedHost` is set.
 3. The ledger is read from `ctx.storage` once, so the 24-hour total survives a reload.
 4. `ctx.mcp.transform` registers `elevenlabs` at the selected region's URL, with `oauth.scope` pinned to seven scopes, or
    adopts the user's own entry at exactly that URL. Another region's URL is `stale`; any other is `conflict`.
@@ -48,17 +48,13 @@ place and keeps the modules it already loaded for unchanged paths. Only `@openco
 8. `ctx.skill.transform`, `ctx.command.transform` (`/elevenlabs-status`, `/elevenlabs-doctor`) and `ctx.rpc.register`
    (`elevenlabs/status`).
 9. `registerToolsRpc` registers `elevenlabs.tools` with the spending guard's shapers.
-10. `ctx.tool.hook("execute.before")` prices a spending call from ElevenLabs' own estimate, may cut a `generations_count`
-    the caller named to what the budget affords, and refuses a call that does not fit before it is sent.
-    `ctx.tool.hook("execute.after")` charges the ledger and appends the cost line, and the expiry line for a
-    generation's link. An `estimate_only` call is neither priced nor charged: its answer is remembered as the price of
-    the paid call with the same arguments.
-11. `watchIntegration` starts. Setup returns one cleanup that stops it, both hooks and the tools RPC.
+10. `watchIntegration` starts. Setup returns one cleanup that stops it and the tools RPC. No per-request hook is
+    registered.
 
 Transforms are synchronous and never throw: a failure is kept as a problem for status, and cleared when the next replay
 succeeds.
 
-## Platform facts (OpenCode 2.2.3 to 2.3.2)
+## Platform facts (OpenCode 2.4.1)
 
 - **The sign-in is CIMD.** ElevenLabs' authorization server advertises `client_id_metadata_document_supported: true` and
   no registration endpoint, so OpenCode sends its own client metadata document
@@ -72,14 +68,12 @@ succeeds.
   and US servers share one. Each region serves the same documents with its own host, and each accepts CIMD.
 - **The token never reaches the plugin.** OpenCode holds it and refreshes it; `/elevenlabs-status` sees only a
   credential's label. That is why the balance needs a separate key.
-- **The hooks.** `execute.before` can change an MCP call's arguments on the model path and in Code Mode, and
-  `execute.after` can add to a result. The tools RPC's executor bypasses both, so the same guard runs there through the
-  block's own shapers.
-- **Unattended Code Mode.** Up to 2.3.0 a schedule's `if: { code }` check runs once at creation, with asks settled
-  unattended. From 2.3.1 `experimental.automation` replaces `experimental.schedule`: a code action's tools are
-  authorized at creation the same way (an ask or a deny is refused), and the program runs, under an unattended grant
-  for those tools, when the scheduler finds it due. Only a server process starts the scheduler; the host test starts it
-  in its embedded host. The flag is `experimental.automations`, also read as `experimental.schedules`.
+- **No per-request hooks.** The plugin registers none. Pricing, caps and the cost line live only in the tools RPC's
+  shapers; an agent or Code Mode call is ElevenLabs' own result.
+- **Unattended Code Mode.** In 2.4.1 `experimental.automation` owns scheduled work: a code action's tools are
+  authorized at creation (an ask or a deny is refused), and the program runs, under an unattended grant for those
+  tools, when the scheduler finds it due. Only a server process starts the scheduler; the host test starts it in its
+  embedded host. The flag is `experimental.automations`.
 - **A plugin tool's declared permission only hides it on a deny.** Every plugin-owned tool that writes asserts its own
   action inside `execute`; `elevenlabs_save_media` does, on both paths.
 - **Changing a server's URL changes its integration id** (`mcp_` + `sha1(name\0url)`), so a region change needs a new
@@ -92,109 +86,49 @@ succeeds.
 
 ## The spending guard
 
+**Only the tools RPC prices calls.** A script or app calls `elevenlabs.tools`; its shapers price a call, enforce the
+caps, reserve and settle the ledger, and put the `cost` object and cost line in that call's own result. An agent or Code
+Mode call goes straight to ElevenLabs: the plugin does not price, cap or annotate it, and its own result stands.
+
 **ElevenLabs is the only source of a price.** This plugin computes none of its own: no rate per character, per second
-or per minute, and no measurement of a local file. A call that can spend is priced by sending ElevenLabs the same call
-with `estimate_only: true` and the same arguments, and reading the figure out of its answer (`estimatePrice` in
-`src/billing.ts`). `ESTIMATE_TOOLS` holds the seven tools whose live schema declares `estimate_only`; `SPEND_TOOLS`
-holds the nineteen that can spend. A spending tool with no estimate — the twelve that are not in `ESTIMATE_TOOLS`,
-from `creative_design_voice` and the batch and outbound calls to `creative_create_brand_kit_from_website` — has no
-price at all: with no cap it runs unpriced, and while a cap the owner set is on it is refused (`PRICE_UNKNOWN`).
+or per minute, and no measurement of a local file. A tools-RPC call that can spend is priced by sending ElevenLabs the
+same call with `estimate_only: true` and the same arguments, and reading the figure out of its answer
+(`estimatePrice` in `src/billing.ts`). `ESTIMATE_TOOLS` holds the seven tools whose live schema declares
+`estimate_only`; `SPEND_TOOLS` holds the nineteen that can spend. A spending tool with no estimate — the twelve that are
+not in `ESTIMATE_TOOLS` — has no price at all: with no cap it runs unpriced, and while a cap is on it is refused
+(`PRICE_UNKNOWN`).
 
-**Caps are opt-in.** `sessionCreditCap` and `dailyCreditCap` default to `null`. With neither set, `quote` and
-`quoteSync` send no estimate and refuse, clamp and reserve nothing. Each path records the figure the result itself
-reports, or reports `Credits: not reported`. The script path keeps nothing between calls: with no call id on
-`ShapeCall` it could not pair a result with its call, so it does not try, and it tells an `estimate_only` answer from a
-paid result by the answer's own `estimate` object (`isEstimateResult`). Everything below about refusals, clamps, holds and the one-in-flight rule applies only while a cap is
-set. The bounds without one are ElevenLabs' own balance check and the permission rules.
+**Caps are opt-in.** `sessionCreditCap` and `dailyCreditCap` default to `null`. With neither set, the shapers price
+nothing, refuse nothing, clamp nothing and reserve nothing; a result is reported at the figure it states, or as
+`Credits: not reported`. The script path cannot await an estimate, so its only price is one the same ledger already
+holds for exactly these arguments: a script sends `estimate_only` first, and the figure is remembered for ten minutes
+(`RESERVATION_MS`). An estimate costs nothing but creates a flow and a node in the workspace, so the script makes one
+per set of arguments, not per attempt.
 
-**The figure is read strictly.** `estimatedCreditsOf` reads `estimate.credits` first, because that is the field the
-live result used (`{"estimate": {"credits": 761.5151418103446}}`), then the same five named keys settlement reads a
-charge under, at the top level. Nothing is read out of prose, and nothing is walked for several levels: a figure this
-parser does not find leaves the call with no price, which a cap, when set, turns into `PRICE_UNKNOWN`. The estimate sets the
-reservation and, where no later figure is seen, the charge, so it is read under at least the rules a figure that could
-*lower* a reservation is read under.
-
-The figure ElevenLabs answers with is the **batch total** for the call it was sent, which live reconcile 1 measured: an
-estimate for four images came back as 761.5151418103446 credits, about 190 each. It is often fractional, and a
-fractional estimate is a real figure — the ledger rounds it up (`Math.ceil`) and the cost line names the figure it
-rounded from. When the call states no count, the batch is the server's own default for that tool
-(`GENERATION_DEFAULTS`: four for an image or an image edit, two for speech, one for a video), so a price divided per
-generation is divided by that default and the cost line says so. A tool whose schema declares `generations_count` with
-no default of its own — `creative_generate_in_flow`, `creative_run_flow_nodes` — gets no per-generation figure, only
-the total.
-
-**An estimate is free but not harmless.** Live reconcile 1 measured two of them against the workspace balance and saw
-no movement and no new billable request, and each one created a flow and a node in the owner's workspace. So with no
-cap the guard sends none at all, and under a cap it asks for one estimate per set of arguments, remembers the figure for ten minutes (`RESERVATION_MS`), and reuses it for
-the paid call rather than creating a second flow. Different arguments are a different call and get their own estimate.
-
-**The estimate is asked for only where the paid call could run.** `estimatorFor` asserts the paid tool's own permission
-(`elevenlabs_<tool>`, through `ctx.permission.assert`) before it sends anything — never a permission of its own, so
-nothing can be estimated that the generation itself may not do. Under `access: "ask-changes"` the estimate goes out
-only if that permission is allowed, so an estimate never creates a flow for a generation the user is about to refuse.
-Under `access: "read-only"` every spending tool is denied, the assert fails, and no estimate is sent either. A declined
-or failed assert leaves the call with no price, which a cap, when set, turns into `PRICE_UNKNOWN`.
-
-**How many prompts the user sees is the host's, and is not yet measured (RE-8).** Two asserts are raised for one priced
-call: `estimatorFor`'s, before the estimate, and the generation's own when it runs. `test/unit/regressions-6.test.ts`
-counts them, so the number cannot change unnoticed. Whether OpenCode turns two asserts into one prompt — by holding an
-"allow once" answer for the same action within the same tool call — cannot be established without a host, and no
-version of this plugin has measured it. Earlier releases of these docs said the user is "asked once"; that was a claim
-about what a host does, written as though this plugin decided it. Live pass 2 counts the prompts under `ask-changes`.
-The ordering itself is settled and is the safe one: asserting before estimating is what keeps `read-only` from creating
-a flow, and what makes `ask-changes` refuse the estimate when the generation is refused.
-
-While a cap the owner set is on, two kinds of call are priced or refused before dispatch: the ones the table classifies as
-spending, and **any name the table does not classify at all, whatever it starts with**. There is no keyword list and
-no prefix. A price that does not fit is refused (`SPEND_CAP_REACHED`), and a count the caller named is first cut to
-what the budget affords; a call that named no count is refused at its whole figure rather than quietly given a smaller
-batch than it asked for.
-
-The unknown half is what closes the chain that starts at `get_more_tools`: a tool asks ElevenLabs to build more tools,
-and a tool this release has never seen has no schema to check its arguments against and no `estimate_only` flag to
-call, so nothing here could price it. A read the table already classifies still runs without a price, as it always
-did, and so does the plugin's own `elevenlabs_save_media`.
-
-Each refusal names what it could not price and what to do about it, in three shapes. A tool that takes `estimate_only`
-is told to send the same call with `estimate_only: true` first. A classified spending tool that does not —
-`creative_design_voice` and `agents_run_tests` — is told that ElevenLabs offers no estimate for it and that both caps
-must be `null` to run it. A name the table does not know is told that nothing here can tell whether it spends, and to
-set both caps to `null` or wait for a release that classifies it.
-
-A price is **reserved** in the ledger before the call is sent and settled into a charge when its result arrives, so a
-parallel turn cannot spend one budget twice. A call that fails, and a hold still open after ten minutes, is charged the
-reserved price: the plugin cannot tell a free failure from a billed one. A later higher figure may replace that charge.
-A zero or a missing result does not free the budget. A charge stays in the session that reserved it, whichever session
-a later result is delivered under, exactly as it keeps that row's figure as its floor: a settlement may raise what a
-call cost but never moves it to another session's budget. The ledger is append-only: every hold and every charge is one
-`ctx.storage` key, `spend/<writerId>/<entryId>`, where `writerId` is unique to this plugin instance and only the
-instance that created a key ever rewrites it. A total is a scan over `spend/` and a sum — there is no merge, no
-`Math.max` and no read-modify-write of a shared record, so no writer can drop another's row. Pruning folds older
+**Reservations and the ledger.** While a cap is on, the shaper clamps a generation count to what the budget affords,
+**reserves** the price in the ledger before the call is sent, and settles it into a charge when the result arrives, so
+two calls that start together cannot spend one budget twice. A call that fails, and a hold still open after ten
+minutes, is charged the reserved price: the plugin cannot tell a free failure from a billed one. A later higher figure
+may replace that charge; a zero or a missing result does not free the budget. A charge stays in the session that
+reserved it, whichever session a later result is delivered under. The ledger is append-only: every hold and every
+charge is one `ctx.storage` key, `spend/<writerId>/<entryId>`, where `writerId` is unique to this plugin instance and
+only the instance that created a key ever rewrites it. A total is a scan over `spend/` and a sum — there is no merge,
+no `Math.max` and no read-modify-write of a shared record, so no writer can drop another's row. Pruning folds older
 entries into that writer's own hourly key, `spend/<writerId>/h/<hour>`, and the hours of every writer are added
-together, which cannot double-count because a charge is folded by exactly one writer. A folded hour is kept while any
-minute of its hour is still inside the window, so a folded charge counts for up to an hour past its own day, and never
-less than it. A key is removed only once it is past the window. Two ledgers handed one storage object share a book and
-one daily cap, as two locations in one OpenCode do. Across processes, exactly: **within one OpenCode the caps are
-exact; across OpenCodes a cap is crossed by at most one call's reservation for each one deciding before its read of the
-others' holds lands, so eight of them at 3,000 credits a call can spend 31,000 against a 10,000 cap; every OpenCode
-reads the store behind each call it admits and every five seconds besides, so none decides on a book older than that; a
-settled charge is never lost.** The crossing needs overlap: calls that wait for one another see one another, and those
-same eight, run one after the next, spend only the 9,000 that fits.
+together, which cannot double-count because a charge is folded by exactly one writer.
 
-The bound follows from the order each path works in. `quote` can await, so it refreshes from the store and then
-reserves: the most it can admit beyond a cap is one reservation for every OpenCode that read before the first of them
-wrote. `quoteSync` cannot await before it dispatches, by the shaper contract, so it bounds its staleness behind itself
+The shaper is synchronous, so it cannot await the store before it dispatches; it bounds its staleness behind itself
 instead — it starts a read it does not wait for after the hold is taken, and the next call on that ledger decides from
 a book that has seen the other OpenCodes' holds. A process that is idle, or whose calls all refuse, writes nothing and
 would never read again, so setup also starts an unref'd timer that reads the store every `LEDGER_REFRESH_MS`, five
-seconds, and stops when the plugin is disposed. Measured over one store, 100-credit calls against a 10,000 cap: two
-OpenCodes spending together reach 10,000, eight reach 10,400, and an OpenCode that started before another spent the
-whole cap admits one call before its next read, or none once the timer has run. Without those two reads the same
-measurements were 20,000, 80,000 and a whole fresh cap. `reserve` keeps its check and its hold synchronous, with
-nothing awaited between them, then
-writes the hold's own key and awaits it before dispatch; a failed write takes the hold back out of memory and refuses
-the call. Two machines share nothing. Two locations keep their own tools-RPC shapers. On the script path, one priced
-call per session and method is in flight.
+seconds, and stops when the plugin is disposed. Two ledgers handed one storage object share a book and one daily cap.
+Across processes, exactly: **within one OpenCode the caps are exact; across OpenCodes a cap is crossed by at most one
+call's reservation for each one deciding before its read of the others' holds lands, so eight of them at 3,000 credits a
+call can spend 31,000 against a 10,000 cap; every OpenCode reads the store behind each call it admits and every five
+seconds besides, so none decides on a book older than that; a settled charge is never lost.** The crossing needs
+overlap: calls that wait for one another see one another, and those same eight, run one after the next, spend only the
+9,000 that fits. Two machines share nothing. Two locations keep their own tools-RPC shapers. On the script path, one
+priced call per session and method is in flight.
 
 ### Argument allowlists
 
@@ -242,8 +176,8 @@ destructive. Nothing is left unclassified. The class is the worst thing a tool c
 runs, only what the generated default rules give it.
 
 **A read is exactly a tool ElevenLabs marks read-only.** The live capture records each tool's
-`readOnlyHint`, and Jelly enforces the declared `readOnly` without loading the plugin, so the table follows the server,
-with two exceptions kept stricter on purpose and named in `READ_ONLY_OVERRIDES`: `agents_query_knowledge_base_rag`,
+`readOnlyHint`, so the table follows the server, with two exceptions kept stricter on purpose and named in
+`READ_ONLY_OVERRIDES`: `agents_query_knowledge_base_rag`,
 which this plugin counts as spending (below), and `get_more_tools`, which sends the model's words to ElevenLabs.
 `test/unit/live-tools.test.ts` fails on any other disagreement. ElevenLabs' `destructiveHint` is broader than this
 table's `destructive` class: it also marks updates that replace a value (`agents_update`, `agents_update_settings`,

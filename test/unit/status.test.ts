@@ -1,13 +1,13 @@
 // The status model: the S13 shared fields, ElevenLabs' own rows (region, spend, conversations, media), and one next step
 // per state. No network and no host.
 import { describe, expect, test } from "bun:test"
-import { ENDPOINT, TESTED_HOSTS } from "../../src/constants.js"
+import { ENDPOINT, SUPPORTED_HOST, TESTED_HOSTS } from "../../src/constants.js"
 import { checkHost } from "../../src/host-version.js"
 import { defaultRules } from "../../src/permissions.js"
 import { buildStatus, formatStatus, StatusRpc, type StatusFacts } from "../../src/status.js"
 import { READ_TOOLS, TRANSCRIPT_TOOLS } from "../../src/elevenlabs-tools.js"
 
-const host = checkHost("2.2.3", false)
+const host = checkHost("2.4.1", false)
 const READ = READ_TOOLS[0]!
 const SPEND = { dailyCredits: 1200, sessionCap: 2000, dailyCap: 10000 }
 const base: StatusFacts = { server: { status: "connected" }, source: { type: "plugin", url: ENDPOINT }, host, tools: [READ], spend: SPEND }
@@ -70,7 +70,7 @@ describe("buildStatus", () => {
     const labels = text.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2, line.indexOf(":")))
     expect(labels).toEqual(["Connection", "Account", "Access", "Region", "Spend", "Conversations", "Media", "Skills", "Tools", "Agents without default rules", "OpenCode", "Next step"])
     expect(text).toContain(`- Region: global (${ENDPOINT})`)
-    expect(text).toContain("- Spend: 1,200 credits spent in the last 24 hours of 10,000; a session is capped at 2,000")
+    expect(text).toContain("- Spend: 1,200 credits recorded from priced tools-RPC calls in the last 24 hours of 10,000; a session's priced tools-RPC calls are capped at 2,000")
     expect(text).toContain("workspace balance unknown")
     expect(text).toContain("- Conversations: full: the transcript tools run, and they carry other people's calls")
     expect(text).toContain("- Account: work")
@@ -106,10 +106,10 @@ describe("buildStatus", () => {
   })
 
   test("an untested host still starts, and the row says so", () => {
-    const status = buildStatus({ ...base, host: checkHost("2.2.99", false) })
+    const status = buildStatus({ ...base, host: checkHost("2.4.99", false) })
     expect(status.host.tested).toBe(false)
-    expect(row(status, "OpenCode")).toContain("2.2.99 (untested; supported range >=2.2.3 <2.4.0)")
-    expect(TESTED_HOSTS).toEqual(["2.2.3", "2.2.4", "2.2.5", "2.2.6", "2.2.7", "2.3.0", "2.3.1", "2.3.2"])
+    expect(row(status, "OpenCode")).toContain(`2.4.99 (untested; supported range ${SUPPORTED_HOST})`)
+    expect(TESTED_HOSTS).toEqual(["2.4.1"])
   })
 
   test("the agent fix prints the block for the current options, in full", () => {

@@ -1947,41 +1947,6 @@ describe("package.json: private, and in the canonical form", () => {
   })
 })
 
-describe("CI: macOS on pushes to master and for releases, never on pull requests", () => {
-  test("ciMatrix: a pull request's matrix has no macOS entry, and a master push's does", () => {
-    assert.deepEqual(ciMatrix(CI_YML), { pullRequest: ["ubuntu-24.04", "ubuntu-24.04-arm"], push: RUNNERS, problems: [] })
-    const include = [
-      { runner: "macos-26", target: "darwin-arm64" },
-      { runner: "ubuntu-24.04", target: "linux-x64-gnu" },
-    ]
-    assert.deepEqual(ciMatrix(ciYml(gatedLine("include", include.slice(1), include))), { pullRequest: ["ubuntu-24.04"], push: ["macos-26", "ubuntu-24.04"], problems: [] })
-  })
-
-  test("ciMatrix refuses a static matrix, macOS on a pull request, no macOS on a push, different Linux entries, and macOS elsewhere", () => {
-    const problems = (line, extra = "") => ciMatrix(`${ciYml(line)}${extra}`).problems.join("; ")
-    assert.match(problems("        os: [ubuntu-24.04, macos-26]"), /line 10 names a macOS runner outside the matrix gated by event; no matrix is gated by event/)
-    assert.match(problems(gatedLine("os", ["ubuntu-24.04", "macos-26"], ["ubuntu-24.04", "macos-26"])), /a pull request runs a macOS runner/)
-    assert.match(problems(gatedLine("os", ["ubuntu-24.04"], ["ubuntu-24.04"])), /a push to master runs no macOS runner/)
-    assert.match(problems(gatedLine("os", ["ubuntu-24.04"], RUNNERS)), /the pull request entries are not every entry without the macOS ones/)
-    assert.match(problems(gatedLine("os", RUNNERS.slice(0, 2), RUNNERS), "  other:\n    runs-on: macos-26\n"), /names a macOS runner outside the matrix gated by event/)
-    assert.equal(problems(gatedLine("os", RUNNERS.slice(0, 2), RUNNERS), "  # macos-26 is named in a comment only\n"), "")
-    assert.match(problems("        os: ${{ fromJSON(github.event_name == 'pull_request' && '[ubuntu' || '[]') }}"), /are not JSON/)
-  })
-
-  test("ciJobsProblems names each runner without a successful job", () => {
-    assert.deepEqual(ciJobsProblems(fullJobs(), RUNNERS), [])
-    assert.deepEqual(ciJobsProblems([...fullJobs(RUNNERS.slice(0, 3)), ...fullJobs(["macos-26-intel"], "cancelled")], RUNNERS), ["no successful job on macos-26-intel"])
-    assert.deepEqual(ciJobsProblems(undefined, ["macos-26"]), ["no successful job on macos-26"])
-  })
-
-  test("this repository's ci.yml: a pull request's matrix has no macOS entry, and a master push's does (npm run check)", () => {
-    const matrix = ciMatrix(readFileSync(join(SCRIPTS, "..", ".github", "workflows", "ci.yml"), "utf8"))
-    assert.deepEqual(matrix.problems, [])
-    assert.equal(matrix.pullRequest.some((runner) => /^macos-/.test(runner)), false)
-    assert.ok(matrix.push.includes("macos-26"), `a push to master runs ${matrix.push.join(", ")}`)
-  })
-})
-
 describe("the conformance report of a plugin that declares sources", () => {
   const pkg = { name: "@owner/kit-test", version: "0.0.1" }
   const sha256 = (text) => createHash("sha256").update(text).digest("hex")

@@ -95,6 +95,8 @@ export interface FakeMcp {
   readonly called: { readonly tool: string; readonly path: string }[]
   /** Each tool call's arguments, in order. */
   readonly inputs: { readonly tool: string; readonly arguments: Record<string, unknown> }[]
+  /** Every JSON-RPC method the server received, in order: `server/discover` comes first when no protocol is declared. */
+  readonly methods: string[]
   /** The `x-elevenlabs-test` header of every request, to tell whose server config the host used. */
   readonly markers: (string | undefined)[]
   close(): Promise<void>
@@ -108,6 +110,7 @@ export async function startFakeMcp(options: FakeMcpOptions = {}): Promise<FakeMc
   const calls: string[] = []
   const called: { tool: string; path: string }[] = []
   const inputs: { tool: string; arguments: Record<string, unknown> }[] = []
+  const methods: string[] = []
   const markers: (string | undefined)[] = []
   const tokens: Record<string, string>[] = []
   const authorizations: Record<string, string>[] = []
@@ -117,12 +120,26 @@ export async function startFakeMcp(options: FakeMcpOptions = {}): Promise<FakeMc
   /** A generated-file link, on the loopback host the plugin's test seam allows. */
   const linkFor = (name: string) => `${fake.origin}/media/${name}`
   const answer = (message: Message, path = "/mcp") => {
-    const reply = (result: unknown) => ({ jsonrpc: "2.0", id: message.id, result })
+    // The MCP 2026-07-28 result envelope: a server implementing that revision must state resultType, and the
+    // cacheable results (tools/list) state a TTL and a cache scope too.
+    const complete = (result: unknown) =>
+      result !== null && typeof result === "object" && !Array.isArray(result) ? { resultType: "complete", ...result } : result
+    const reply = (result: unknown) => ({ jsonrpc: "2.0", id: message.id, result: complete(result) })
     switch (message.method) {
       case "initialize":
         return reply({ protocolVersion: message.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "fake-elevenlabs", version: "0.0.0" } })
+      case "server/discover":
+        // The MCP 2026-07-28 discovery result, which OpenCode 2.4.1 asks for when a server declares no protocol.
+        return reply({
+          resultType: "complete",
+          supportedVersions: ["2026-07-28"],
+          capabilities: { tools: {} },
+          ttlMs: 0,
+          cacheScope: "private",
+          _meta: { "io.modelcontextprotocol/serverInfo": { name: "fake-elevenlabs", version: "0.0.0" } },
+        })
       case "tools/list":
-        return reply({ tools: options.catalog === "elevenlabs" ? CATALOG : tools })
+        return reply({ tools: options.catalog === "elevenlabs" ? CATALOG : tools, ttlMs: 0, cacheScope: "private" })
       case "tools/call": {
         const tool = message.params?.name ?? ""
         const args = message.params?.arguments ?? {}
@@ -229,14 +246,16 @@ export async function startFakeMcp(options: FakeMcpOptions = {}): Promise<FakeMc
     if (route.startsWith("/.well-known/") || route.startsWith("/oauth")) return signIn(request, response, route)
     if (route.startsWith("/media/")) return media(request, response, route)
     markers.push(header(request, "x-elevenlabs-test"))
+    // Read the body before the challenge so the method log shows what a 401 ended.
+    const body = request.method === "POST" ? (JSON.parse(await read(request)) as Message | Message[]) : undefined
+    for (const message of body === undefined ? [] : Array.isArray(body) ? body : [body]) methods.push(message.method)
     if (fake.challenge) {
       const metadata = `${fake.origin}/.well-known/oauth-protected-resource${route}`
       return void response
         .writeHead(401, { "content-type": "application/json", "www-authenticate": `Bearer resource_metadata="${metadata}"` })
         .end(JSON.stringify({ detail: "OAuth bearer token required for the hosted MCP." }))
     }
-    if (request.method !== "POST") return void response.writeHead(405, { allow: "POST" }).end()
-    const body = JSON.parse(await read(request)) as Message | Message[]
+    if (body === undefined) return void response.writeHead(405, { allow: "POST" }).end()
     const replies = (Array.isArray(body) ? body : [body]).filter((message) => message.id !== undefined).map((message) => answer(message, route))
     if (!replies.length) return void response.writeHead(202).end()
     response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(Array.isArray(body) ? replies : replies[0]))
@@ -251,6 +270,7 @@ export async function startFakeMcp(options: FakeMcpOptions = {}): Promise<FakeMc
     calls,
     called,
     inputs,
+    methods,
     markers,
     close: () => new Promise<void>((resolve) => (server.closeAllConnections(), server.close(() => resolve()))),
   })
