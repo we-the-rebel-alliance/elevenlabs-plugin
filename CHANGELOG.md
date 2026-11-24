@@ -17,9 +17,9 @@ Phase 4a of the plugin-family rebuild: the repository is `we-the-rebel-alliance/
 - **A new fixed-context text.** The namespace line and the three skill descriptions are within their budgets. The
   namespace counters the hosted server's unpinned `npx … @latest` setup: setup is not run unless the user asks.
 - **No legacy.** The pre-append-only ledger compatibility path is removed; the ledger counts only the records it writes
-  in the current append-only format. The Jelly guide and the Jelly-only paragraphs are gone, as is the Jelly declaration
-  test that the pinned copy of Jelly's kit cannot run against the new package name. The `sources` and `jelly` keys remain
-  for the next phase.
+  in the current append-only format. The legacy declaration guide and its paragraphs are gone, as is the legacy declaration
+  test that the pinned kit copy cannot run against the new package name. The `sources` and `jelly` keys remain for the
+  next phase.
 - **One CI job.** `ci.yml` has one job named `ci`, runs the full check on Node 24 with `contents: read`, and pins its
   actions by commit.
 

@@ -52,7 +52,7 @@ const added = [...names].filter((name) => !known.has(name)).sort()
 const removed = [...known].filter((name) => !names.has(name)).sort()
 const held = [...unclassified].filter((name) => names.has(name)).sort()
 const annotated = live.some((tool) => tool.annotations !== undefined)
-// readOnly is what Jelly enforces, so it is the one hint checked: a read is exactly a tool ElevenLabs marks read-only,
+// readOnly is what the legacy declaration carries, so it is the one hint checked: a read is exactly a tool ElevenLabs marks read-only,
 // except where READ_ONLY_OVERRIDES records why the table is stricter. ElevenLabs' destructiveHint also marks updates
 // that replace a value, which this table classes as writes; only deletes are `destructive` here.
 const reclassified = live
@@ -72,8 +72,8 @@ const changeWording = live
 
 console.log(`${path === LIVE ? "Live catalogue: " : ""}${live.length} tools`)
 if (!annotated) console.log("The saved list carries no annotations, so no class can be confirmed from it.")
-for (const name of added) console.log(`+ ${name}  new upstream: classify it in src/elevenlabs-tools.ts, then jelly and the README`)
-for (const name of removed) console.log(`- ${name}  gone upstream: remove it from src/elevenlabs-tools.ts, jelly and the README`)
+for (const name of added) console.log(`+ ${name}  new upstream: classify it in src/elevenlabs-tools.ts, then the legacy declaration and the README`)
+for (const name of removed) console.log(`- ${name}  gone upstream: remove it from src/elevenlabs-tools.ts, the legacy declaration and the README`)
 for (const name of reclassified) console.log(`! ${name}  upstream annotations disagree with the class in src/elevenlabs-tools.ts`)
 for (const line of changeWording) console.log(`? ${line}  a read whose description says it changes something`)
 for (const name of held) console.log(`= ${name}  left unclassified on purpose: the rule("*", other) default asks for it, and read-only denies it`)

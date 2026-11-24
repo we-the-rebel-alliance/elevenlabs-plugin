@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ALL_TOOLS, ESTIMATE_TOOLS, SPEND_ANY, mustPrice } from "../../src/elevenlabs-tools.js"
-import { estimatePrice, quoteCall, quoteCallSync, Ledger, SpendRefused } from "../../src/billing.js"
+import { quoteCallSync, Ledger, SpendRefused } from "../../src/billing.js"
 import { SAVE_ACTION, runSaveMedia } from "../../src/media/tool.js"
 import { sharedStore } from "../fixtures/store.js"
 
@@ -14,23 +14,27 @@ const caps = (session: number | null = 2000, daily: number | null = 10000) => ({
 const call = (id = "c1", sessionID = "ses_a") => ({ sessionID, agent: "build", messageID: "m1", id })
 
 describe("nothing that may spend runs unguarded", () => {
-  test("every creative_* tool is priced from ElevenLabs' own estimate or refused while a cap is on", async () => {
+  test("every creative_* tool is priced from a remembered estimate or refused while a cap is on", () => {
     const creative = ALL_TOOLS.filter((tool) => tool.startsWith("creative_"))
     expect(creative.length).toBeGreaterThan(5)
     // With no estimate to hand, every creative name the guard must price refuses: nothing here prices itself.
     for (const tool of creative.filter(mustPrice)) {
       const ledger = new Ledger()
-      const outcome = await quoteCall({ ledger, caps: () => caps() }, tool, {}, call(tool)).then(
-        () => "quoted",
-        (error: unknown) => (error as SpendRefused).code,
-      )
+      const outcome = (() => {
+        try {
+          quoteCallSync({ ledger, caps: () => caps() }, tool, {}, call(tool))
+          return "quoted"
+        } catch (error) {
+          return (error as SpendRefused).code
+        }
+      })()
       expect({ tool, outcome }).toEqual({ tool, outcome: "PRICE_UNKNOWN" })
     }
     // Given ElevenLabs' own figure, the tools that accept `estimate_only` are priced and reserved rather than refused.
     for (const tool of ESTIMATE_TOOLS) {
       const ledger = new Ledger()
-      const estimate = async (name: string, input: Record<string, unknown>) => estimatePrice(name, input, { output: { credits: 120 } })
-      const { price, tracked } = await quoteCall({ ledger, caps: () => caps(), estimate }, tool, {}, call(tool))
+      ledger.rememberPrice(tool, {}, { credits: 120, basis: "exact", parts: [] })
+      const { price, tracked } = quoteCallSync({ ledger, caps: () => caps() }, tool, {}, call(tool))
       expect({ tool, credits: price.credits, tracked }).toEqual({ tool, credits: 120, tracked: true })
     }
     // A creative name the table has never seen is still guarded by its shape.
@@ -38,23 +42,27 @@ describe("nothing that may spend runs unguarded", () => {
     expect(SPEND_ANY).toContain("creative_transcribe_audio")
   })
 
-  test("a name the vendor adds later, outside the table, is refused rather than priced by a guess", async () => {
+  test("a name the vendor adds later, outside the table, is refused rather than priced by a guess", () => {
     const ledger = new Ledger()
-    await expect(quoteCall({ ledger, caps: () => caps() }, "creative_generate_tomorrows_thing", {}, call())).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
+    expect(() => quoteCallSync({ ledger, caps: () => caps() }, "creative_generate_tomorrows_thing", {}, call())).toThrow(SpendRefused)
     // With no cap there is nothing to refuse: the call runs, and says it is untracked.
-    const untracked = await quoteCall({ ledger, caps: () => caps(null, null) }, "creative_generate_tomorrows_thing", {}, call())
+    const untracked = quoteCallSync({ ledger, caps: () => caps(null, null) }, "creative_generate_tomorrows_thing", {}, call())
     expect(untracked.tracked).toBe(false)
   })
 
   // The gate used to be the `creative_` prefix, so a spending tool under any other name ran unpriced with both caps on,
   // and `get_more_tools` is a tool whose whole job is to ask ElevenLabs for more tools.
-  test("an unknown name is refused under a cap whatever its prefix, on the model path and the script path alike", async () => {
+  test("an unknown name is refused under a cap whatever its prefix, on the script path", () => {
     for (const tool of ["agents_new_spender", "foo_bar"]) {
       const ledger = new Ledger()
-      const refused = await quoteCall({ ledger, caps: () => caps() }, tool, {}, call(tool)).then(
-        () => undefined,
-        (error: unknown) => error as SpendRefused,
-      )
+      const refused = (() => {
+        try {
+          quoteCallSync({ ledger, caps: () => caps() }, tool, {}, call(tool))
+          return undefined
+        } catch (error) {
+          return error as SpendRefused
+        }
+      })()
       expect({ tool, code: refused?.code }).toEqual({ tool, code: "PRICE_UNKNOWN" })
       // The next step is a configuration change or a later release, not another call: there is no estimate to
       // suggest for a tool with no schema here.
@@ -63,30 +71,16 @@ describe("nothing that may spend runs unguarded", () => {
       expect(refused?.nextStep).toContain("wait for a release that classifies it")
       expect(refused?.nextStep).not.toContain("estimate_only")
 
-      // The script path cannot await an estimate, and refuses the same way.
-      const sync = new Ledger()
-      const syncRefused = (() => {
-        try {
-          quoteCallSync({ ledger: sync, caps: () => caps() }, tool, {}, call(tool))
-          return undefined
-        } catch (error) {
-          return error as SpendRefused
-        }
-      })()
-      expect({ tool, code: syncRefused?.code }).toEqual({ tool, code: "PRICE_UNKNOWN" })
-      expect(syncRefused?.message).toContain("is not in this plugin's tool table")
-
-      // With both caps off there is nothing to enforce: it runs, untracked, on both paths.
+      // With both caps off there is nothing to enforce: it runs, untracked.
       const off = new Ledger()
-      expect((await quoteCall({ ledger: off, caps: () => caps(null, null) }, tool, {}, call(tool))).tracked).toBe(false)
       expect(quoteCallSync({ ledger: off, caps: () => caps(null, null) }, tool, {}, call(tool)).tracked).toBe(false)
     }
   })
 
-  test("a classified read still runs with a cap on, and so does the plugin's own tool", async () => {
+  test("a classified read still runs with a cap on, and so does the plugin's own tool", () => {
     const ledger = new Ledger()
     for (const tool of ["agents_list", "agents_get_conversation", "get_more_tools", "save_media"]) {
-      const { tracked, price } = await quoteCall({ ledger, caps: () => caps() }, tool, {}, call(tool))
+      const { tracked, price } = quoteCallSync({ ledger, caps: () => caps() }, tool, {}, call(tool))
       expect({ tool, tracked, credits: price.credits }).toEqual({ tool, tracked: false, credits: 0 })
     }
   })
@@ -182,17 +176,5 @@ describe("elevenlabs_save_media asserts the path rule too", () => {
     }) as never
     const save = { root: join(root, "media"), maxBytes: 1024, hosts: ["elevenlabsusercontent.com"], assert: declined }
     await expect(runSaveMedia({ ...save, fetch: (async () => new Response("x")) as unknown as typeof fetch }, { url: "https://elevenlabsusercontent.com/a.mp3" }, { sessionID: "s", agent: "build", messageID: "m", id: "i" })).rejects.toMatchObject({ name: "Permission.DeclinedError" })
-  })
-})
-
-describe("one estimate per call", () => {
-  test("the model path asks ElevenLabs exactly once, whatever the answer", async () => {
-    for (const answer of [undefined, { credits: 400, basis: "exact" as const, parts: [] }]) {
-      let asked = 0
-      const ledger = new Ledger()
-      const estimate = async () => (asked++, answer)
-      await quoteCall({ ledger, caps: () => caps(), estimate }, "creative_generate_image", { prompt: "x" }, call()).catch(() => undefined)
-      expect(asked).toBe(1)
-    }
   })
 })

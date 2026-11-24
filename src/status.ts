@@ -30,7 +30,7 @@ interface ShadowedSkill {
   readonly path: string
 }
 
-/** What the last 24 hours have spent, the caps that bound a session and the day, and the balance when a key is stored. */
+/** What priced tools-RPC calls recorded in the last 24 hours, the caps that bound a session and the day, and the balance when a key is stored. */
 export interface SpendFacts {
   readonly dailyCredits: number
   readonly sessionCap: CreditCap
@@ -50,7 +50,7 @@ export interface StatusFacts {
   /** Sign-ins OpenCode still stores for other regions, which this plugin no longer uses. */
   readonly oldSignIns?: readonly OldSignIn[]
   readonly spend?: SpendFacts
-  /** Other `mcp.servers` entries that point at ElevenLabs: outside this plugin's hooks, and outside its caps. */
+  /** Other `mcp.servers` entries that point at ElevenLabs: outside this plugin's tools RPC, and outside its caps. */
   readonly otherServers?: readonly string[]
   readonly mediaRoot?: string
   readonly host: HostCheck
@@ -96,11 +96,11 @@ export interface Status {
   readonly unguardedAgents: readonly string[]
   /** Skills OpenCode loads instead of the plugin's own; empty when there are none. */
   readonly shadowedSkills: readonly ShadowedSkill[]
-  /** Credits this plugin has spent, and the caps that bound it. The balance is only here with an API key. */
+  /** Credits recorded from priced tools-RPC calls, and the caps that bound them. The balance is only here with an API key. */
   readonly spend: SpendFacts
   /**
    * Other `mcp.servers` entries at ElevenLabs' own address. Each is its own server to OpenCode, with its own
-   * tool prefix, so this plugin never sees its calls and the caps do not bind them. Empty when there are none.
+   * tool prefix, so this plugin never sees its calls and the tools-RPC caps do not bind them. Empty when there are none.
    */
   readonly otherServers: readonly string[]
   readonly mediaRoot: string
@@ -234,7 +234,7 @@ function nextStepOf(status: Omit<Status, "nextStep">): string {
   if (status.otherServers.length && capped) {
     const many = status.otherServers.length > 1
     const names = listed(status.otherServers.map((name) => `mcp.servers.${name}`))
-    return `${names} also ${many ? "point" : "points"} at ${DISPLAY_NAME}, and this plugin's credit caps do not bind calls to ${many ? "them" : "it"}. Remove ${many ? "them" : "it"} in /mcps to bring those calls under the caps.`
+    return `${names} also ${many ? "point" : "points"} at ${DISPLAY_NAME}, and this plugin's tools-RPC caps do not bind calls to ${many ? "them" : "it"}. Remove ${many ? "them" : "it"} in /mcps to bring those calls under the tools-RPC caps.`
   }
   // An untested host changes no next step: the OpenCode row says it is untested.
   return NOTHING_TO_DO
@@ -287,19 +287,19 @@ function regionText({ region, endpoint, oldSignIns }: Status) {
 /** `a`, `a and b`, `a, b and c`. */
 const listed = (items: readonly string[]) => (items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : items[0]!)
 
-/** The other ElevenLabs entries, named as config keys: what the caps do not reach. */
+/** The other ElevenLabs entries, named as config keys: what the tools-RPC caps do not reach. */
 const otherServersText = (names: readonly string[]) =>
-  `${listed(names.map((name) => `mcp.servers.${name}`))} ${names.length > 1 ? "also point" : "also points"} at ${DISPLAY_NAME} and ${names.length > 1 ? "are" : "is"} outside these caps`
+  `${listed(names.map((name) => `mcp.servers.${name}`))} ${names.length > 1 ? "also point" : "also points"} at ${DISPLAY_NAME} and ${names.length > 1 ? "are" : "is"} outside the tools-RPC caps`
 
-/** The credits spent, the caps, the workspace balance only when an API key is stored, and what the caps do not bind. */
+/** The credits recorded by priced tools-RPC calls, the caps, the workspace balance only when an API key is stored, and what the caps do not bind. */
 function spendText({ spend, region, otherServers }: Status) {
   const count = (value: number) => value.toLocaleString("en-US")
   // Caps are opt-in: with none set, the row says what was spent and that nothing here bounds it.
   const parts = [
     spend.dailyCap === null
-      ? `${count(spend.dailyCredits)} credits spent in the last 24 hours, with no daily cap`
-      : `${count(spend.dailyCredits)} credits spent in the last 24 hours of ${count(spend.dailyCap)}`,
-    spend.sessionCap === null ? "no session cap" : `a session is capped at ${count(spend.sessionCap)}`,
+      ? `${count(spend.dailyCredits)} credits recorded from priced tools-RPC calls in the last 24 hours, with no daily cap`
+      : `${count(spend.dailyCredits)} credits recorded from priced tools-RPC calls in the last 24 hours of ${count(spend.dailyCap)}`,
+    spend.sessionCap === null ? "no session cap" : `a session's priced tools-RPC calls are capped at ${count(spend.sessionCap)}`,
   ]
   if (spend.balance) {
     const { used, limit, resetsAt, extension } = spend.balance

@@ -27,6 +27,7 @@ describe("skills", () => {
     const skill = parseSkill(name, join(SKILLS_DIR, name, "SKILL.md"), text)
     expect(skill.name as string).toBe(name)
     expect(skill.description?.length).toBeGreaterThan(80)
+    expect(skill.description!.length).toBeLessThanOrEqual(300)
     expect(text.split("\n").filter((line) => line.startsWith("description:"))).toHaveLength(1)
     expect(skill.content.length).toBeGreaterThan(0)
   })

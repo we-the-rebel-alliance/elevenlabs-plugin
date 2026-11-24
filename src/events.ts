@@ -135,7 +135,7 @@ const SIGN_IN_NEXT = `Run /connect and choose ${DISPLAY_NAME} to sign in, then c
 const STATUS_NEXT = "Run /elevenlabs-status and follow its next step."
 
 export const EVENTS_DESCRIPTION =
-  "For Memory's collector and scripts, not for answering questions: lists the conversations the workspace's ElevenLabs agents had since a cursor, as normalised events, oldest first, " +
+  "For a collector and scripts, not for answering questions: lists the conversations the workspace's ElevenLabs agents had since a cursor, as normalised events, oldest first, " +
   "metadata only: each conversation's id, its start, the agent, and a title of the agent's name with the call's direction, status and outcome. Never a caller, a transcript or a summary. " +
   "A conversation is listed once it is done or failed, or 2 hours after it started. Pass the previous result's cursor, with account default, to list what came after; without one it starts at since, or 24 hours ago. " +
   "A read that starts before an agent's retention horizon answers gap (expired) once, as conversations may have been deleted; an agent that keeps no conversations (retention 0, Zero Retention Mode) is never seen. " +

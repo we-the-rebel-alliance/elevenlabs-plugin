@@ -17,7 +17,7 @@ npm run check          # every stage, in order, stopping at the first failure
 npm run check unit     # one stage
 ```
 
-Stages: `typecheck`, `unit`, `conformance`, `build`, `icons`, `host`, `pack`, `forbidden`, `copies`, `whitelist`,
+Stages: `typecheck`, `unit`, `conformance`, `kit`, `build`, `icons`, `host`, `pack`, `forbidden`, `copies`, `whitelist`,
 `actionlint`. The host and pack stages run on OpenCode 2.4.1, the one tested release; `OPENCODE_BIN_2_4_1` may point at a
 stock binary instead of the one `npm` installs.
 
@@ -35,7 +35,7 @@ list changes:
    `test/fixtures/README.md`).
 2. `npm run drift` names every tool the plugin does not classify, every tool the list has lost, and every tool whose
    annotations disagree with its class.
-3. Update `src/elevenlabs-tools.ts`, then `package.json`'s copied `jelly.tools` declaration.
+3. Update `src/elevenlabs-tools.ts`, then the copied legacy `jelly.tools` declaration.
 4. `npm run check`.
 
 ## Source

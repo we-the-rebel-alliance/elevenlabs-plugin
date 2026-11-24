@@ -39,7 +39,7 @@ describe("docs", () => {
   // The release itself is the one exception: an install spec names its tag, and CONTRIBUTING's release section names the
   // version. Everything else names no version and no pre-release state.
   test.each(["README.md", "CONTRIBUTING.md", ...DOCS, ...SKILLS])("%s names no version of the plugin and no pre-release state, but the release", (file) => {
-    const body = flat(file).replace(/elevenlabs-plugin#v\d+\.\d+\.\d+/g, "").replace(/## Releasing .*?(?= ## |$)/, "")
+    const body = flat(file).replace(/elevenlabs-plugin#v<version>/g, "").replace(/v0\.0\.0 \(phase 4b\)/g, "").replace(/## Releasing .*?(?= ## |$)/, "")
     expect(body).not.toMatch(/elevenlabs-plugin@\d|\bv?\d+\.\d+\.\d+-|\bv?0\.0\.\d\b|not (yet )?published|"private"/i)
   })
 
@@ -55,7 +55,7 @@ describe("docs", () => {
     const uninstall = /## Uninstall(.*?)## Links/.exec(flat("README.md"))?.[1] ?? ""
     const logout = uninstall.indexOf("opencode mcp logout elevenlabs")
     const check = uninstall.indexOf("opencode auth list")
-    const remove = uninstall.indexOf("opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0")
+    const remove = uninstall.indexOf("opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v<version>")
     expect(logout).toBeGreaterThanOrEqual(0)
     expect(check).toBeGreaterThan(logout)
     expect(remove).toBeGreaterThan(check)
@@ -170,7 +170,7 @@ describe("docs", () => {
     expect(readme).toContain("There is no credit cap unless you set one.")
     expect(readme).toContain("Caps are opt-in.")
     expect(readme).not.toMatch(/Caps are on by default|2,000 credits/)
-    expect(readme).toContain("A cap bounds this plugin, not your account")
+    expect(readme).toContain("A cap bounds this plugin's tools-RPC calls, not your account")
     expect(readme).toContain("No dollar figure is derived from credits")
   })
 })

@@ -1,5 +1,5 @@
 // ElevenLabs' tool names, without the `elevenlabs_` server prefix: the one place that classifies them. The default
-// permission rules, the tools RPC's methods, status, the spending guard, the copied Jelly declaration and the tests all
+// permission rules, the tools RPC's methods, status, the spending guard, the copied legacy declaration and the tests all
 // derive from these lists, and package.json's `jelly.tools` must match them. Keep this file free of
 // runtime imports: scripts/check-elevenlabs-tools.mjs loads it with Node's type stripping to report upstream drift.
 //
@@ -287,7 +287,7 @@ export const WRITE_TOOLS: readonly string[] = [
 
 /**
  * Where this table is stricter than ElevenLabs' own `readOnlyHint`, by name, with the reason. Each one is declared as
- * not read-only in the copied Jelly declaration, so a read-only helper is never given it, and the drift test accepts a
+ * not read-only in the copied legacy declaration, so a read-only helper is never given it, and the drift test accepts a
  * disagreement only when it is listed here.
  */
 export const READ_ONLY_OVERRIDES: Readonly<Record<string, string>> = {

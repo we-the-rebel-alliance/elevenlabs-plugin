@@ -1,5 +1,5 @@
 // Narrow fakes of the public plugin context: only the members a test touches, typed with Pick<> so they
-// stay valid against later 2.2 and 2.3 context shapes.
+// stay valid against OpenCode 2.4.1.
 import type { Plugin } from "@opencode/plugin"
 import { READ_TOOLS } from "../../src/elevenlabs-tools.js"
 import type { Rule } from "../../src/permissions.js"
@@ -62,13 +62,12 @@ export function agentEditor(agents: FakeAgent[]) {
 
 type SetupContext = Pick<Plugin.Context, "app" | "options" | "mcp" | "agent" | "skill" | "command" | "session" | "tool" | "integration" | "rpc" | "permission" | "location" | "event" | "storage">
 
-/** One tool as the host lists it: what `estimatorFor` looks its executor up in. */
+/** One tool as the host lists it: what the source read and status look tools up in. */
 export type FakeTool = { id: string; execute: (input: unknown, context: unknown) => Promise<unknown> }
 
 /**
  * A context with only what setup touches. Each transform is collected so the test can replay it. `toolList` is the
- * list `ctx.tool.list()` answers with, and is mutable: a test that needs the spending guard to reach ElevenLabs' own
- * estimate pushes an executor for the tool it is pricing.
+ * list `ctx.tool.list()` answers with, and is mutable.
  */
 export function pluginContext(options: unknown, version = "2.4.1") {
   const mcp = transforms<McpEditor>()
@@ -80,7 +79,6 @@ export function pluginContext(options: unknown, version = "2.4.1") {
   const rpc: string[] = []
   const handlers = new Map<string, Record<string, (input: unknown, context: unknown) => Promise<unknown>>>()
   const hooks: string[] = []
-  const hookFns = new Map<string, (event: never) => Promise<void>>()
   const toolList: FakeTool[] = [{ id: `elevenlabs_${READ_TOOLS[0]}`, execute: async () => ({ content: [{ type: "text", text: "ok" }] }) }]
   const stored = new Map<string, unknown>()
   const store = {
@@ -108,9 +106,9 @@ export function pluginContext(options: unknown, version = "2.4.1") {
     tool: {
       transform: tool.transform,
       list: async () => toolList,
-      hook: async (name: string, callback?: (event: never) => Promise<void>) => {
+      // Kept as a spy so a test can prove the plugin registers no per-request hook at all.
+      hook: async (name: string) => {
         hooks.push(name)
-        if (callback) hookFns.set(name, callback)
         return { dispose: async () => void hooks.splice(hooks.indexOf(name), 1) }
       },
     },
@@ -123,5 +121,5 @@ export function pluginContext(options: unknown, version = "2.4.1") {
     permission: { assert: async () => undefined, hook: async () => ({ dispose: async () => undefined }) },
     event: { subscribe: ({ signal }: { signal: AbortSignal }) => ({ [Symbol.asyncIterator]: () => ({ next: () => new Promise((resolve) => signal.addEventListener("abort", () => resolve({ done: true, value: undefined }))) }) }) },
   } as unknown as SetupContext
-  return { ctx: ctx as Plugin.Context, mcp, agent, skill, command, tool, toolList, integration, rpc, handlers, hooks, hookFns, stored }
+  return { ctx: ctx as Plugin.Context, mcp, agent, skill, command, tool, toolList, integration, rpc, handlers, hooks, stored }
 }

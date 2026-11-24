@@ -92,7 +92,7 @@ const lines = async (context: DoctorContext, facts: DoctorFacts): Promise<Line[]
     [true, `media: ${root} (created on the first save, files up to ${cap(facts.maxMediaBytes)} bytes)`],
     [
       true,
-      `spend: ${count(spend.dailyCredits)} credits in the last 24 hours${spend.dailyCap === null ? ", with no daily cap" : ` of ${count(spend.dailyCap)}`}; ${spend.sessionCap === null ? "no session cap" : `a session is capped at ${count(spend.sessionCap)}`}`,
+      `spend: ${count(spend.dailyCredits)} credits recorded from priced tools-RPC calls in the last 24 hours${spend.dailyCap === null ? ", with no daily cap" : ` of ${count(spend.dailyCap)}`}; ${spend.sessionCap === null ? "no session cap" : `a session's priced tools-RPC calls are capped at ${count(spend.sessionCap)}`}`,
     ],
     [
       facts.balance !== undefined || spend.balance === undefined,

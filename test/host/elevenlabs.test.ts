@@ -1,5 +1,5 @@
-// The plugin on the public @opencode/sdk host: load and connect, the permission model, the spending guard, saving a
-// generated file, /elevenlabs-status, unload, and the /connect entry with its scope pin. Each describe owns one host.
+// The plugin on the public @opencode/sdk host: load and connect, the permission model, saving a generated file,
+// /elevenlabs-status, unload, and the /connect entry with its scope pin. Each describe owns one host.
 import { ROOT } from "./isolate.js"
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { existsSync, readFileSync, realpathSync } from "node:fs"
@@ -13,7 +13,7 @@ import { defaultRules, type Rule } from "../../src/permissions.js"
 import { SKILL_NAMES } from "../../src/skills.js"
 import { OAUTH_SCOPES, SUPPORTED_HOST, TESTED_HOSTS } from "../../src/constants.js"
 import { serverIntegrationID } from "../../src/old-sign-ins.js"
-import { DELETE, IMAGE, IMAGE_CREDITS, LINK, LIST, NEW_TOOL, READ, SPEECH, WRITE } from "./fake-mcp.js"
+import { DELETE, IMAGE, LINK, LIST, NEW_TOOL, READ, SPEECH, WRITE } from "./fake-mcp.js"
 import { agentRules, attempt, cleanup, effect, HOST_VERSION, session, startHost, unattended, until, type Host } from "./harness.js"
 
 const AGENT_RULES = defaultRules().map((rule, index, rules) => `  ${JSON.stringify(rule)}${index < rules.length - 1 ? "," : ""}`).join("\n")
@@ -168,7 +168,7 @@ describe(`the plugin's own server on OpenCode ${HOST_VERSION}`, () => {
     const text = await status(host, await session(host))
     expect(text).toContain(`- Connection: connected (${host.fake.url}, registered by this plugin)`)
     expect(text).toContain("- Region: global (https://api.elevenlabs.io/v1/mcp)")
-    expect(text).toContain("- Spend: 0 credits spent in the last 24 hours, with no daily cap; no session cap")
+    expect(text).toContain("- Spend: 0 credits recorded from priced tools-RPC calls in the last 24 hours, with no daily cap; no session cap")
     expect(text).toContain("- Conversations: full: the transcript tools run, and they carry other people's calls")
     expect(text).toContain("- Skills: the plugin's own\n")
     expect(text).toContain(`- Tools: ${SERVED.length} available, 1 unknown: ${NEW} (new tools run too)\n`)
@@ -187,88 +187,6 @@ describe(`the plugin's own server on OpenCode ${HOST_VERSION}`, () => {
     for (const id of BUILT_IN) expect(rules.get(id)!.some((rule) => rule.action.startsWith("elevenlabs_"))).toBe(false)
     const { data: commands } = await host.client.command.list({ location: host.location })
     expect(commands.map((command) => command.name)).not.toContain("elevenlabs-status")
-  })
-})
-
-// D1: the spending guard. The fake prices an image at IMAGE_CREDITS per generation and charges nothing for an estimate.
-describe(`the spending guard on OpenCode ${HOST_VERSION}`, () => {
-  describe("a session cap that fits one generation", () => {
-    let host: Host
-    beforeAll(async () => {
-      host = await startHost({ options: { sessionCreditCap: IMAGE_CREDITS, dailyCreditCap: 100_000 } })
-      await elevenlabsTools(host)
-    })
-    afterAll(() => host?.close())
-
-    // The guard runs on the model path and in Code Mode: the host's own `execute` (which a host test's direct executor
-    // call bypasses), so each proof here is a Code Mode call, where the arguments and the cost line are observable.
-    const generate = (sessionID: string, args: Record<string, unknown>) =>
-      codeMode(host, sessionID, `const r = await tools.elevenlabs[${JSON.stringify(IMAGE)}](${JSON.stringify(args)}); throw new Error("SEEN " + JSON.stringify(r))`)
-
-    test("asks ElevenLabs for a price first, clamps four generations to one, and charges only the one that ran", async () => {
-      const before = host.fake.calls.length
-      const outcome = await generate(await session(host), { prompt: "a ceramic mug", generations_count: 4 })
-      expect(outcome).toHaveProperty("seen")
-      // Two calls, both to the same tool: the free estimate, then the paid generation, cut to what the cap affords.
-      expect(host.fake.calls.slice(before)).toEqual([IMAGE, IMAGE])
-      expect(host.fake.inputs.at(-1)!.arguments).toMatchObject({ prompt: "a ceramic mug", generations_count: 1 })
-      expect(host.fake.inputs.at(-2)!.arguments).toMatchObject({ estimate_only: true })
-      // The result carries the structured cost, so a Code Mode program can read it too.
-      expect(JSON.stringify(outcome)).toContain('"cost"')
-      expect((outcome as { seen: { cost: { credits: number } } }).seen.cost.credits).toBe(IMAGE_CREDITS)
-    })
-
-    test("a request for more than the cap affords is clamped, not refused, while one generation still fits", async () => {
-      const before = host.fake.calls.length
-      const outcome = await generate(await session(host), { prompt: "a big scene", generations_count: 2 })
-      expect(outcome).toHaveProperty("seen")
-      expect(host.fake.inputs.at(-1)!.arguments).toMatchObject({ generations_count: 1 })
-      expect(host.fake.calls.slice(before)).toEqual([IMAGE, IMAGE])
-    })
-  })
-
-  describe("a session cap below one generation", () => {
-    let host: Host
-    beforeAll(async () => {
-      host = await startHost({ options: { sessionCreditCap: 10, dailyCreditCap: 100_000 } })
-      await elevenlabsTools(host)
-    })
-    afterAll(() => host?.close())
-
-    const generate = (sessionID: string, tool: string, args: Record<string, unknown>) =>
-      codeMode(host, sessionID, `await tools.elevenlabs[${JSON.stringify(tool)}](${JSON.stringify(args)}); throw new Error("SEEN")`)
-
-    test("refuses with SPEND_CAP_REACHED after the estimate, and never makes the generation call", async () => {
-      const before = host.fake.calls.length
-      const outcome = await generate(await session(host), IMAGE, { prompt: "a ceramic mug", generations_count: 1 })
-      expect(outcome).toHaveProperty("refused")
-      expect((outcome as { refused: string }).refused).toContain("SPEND_CAP_REACHED")
-      // The estimate was free; the paid call never happened.
-      expect(host.fake.calls.slice(before)).toEqual([IMAGE])
-      expect(host.fake.inputs.at(-1)!.arguments).toMatchObject({ estimate_only: true })
-    })
-
-    // This used to prove speech was priced from a published rate in the plugin's own table, so a refusal reached the
-    // server not at all. There is no rate table now: speech is estimated like every other paid call, so the estimate
-    // is the one call a refusal makes, and the figure in the refusal is ElevenLabs' own.
-    test("a speech call is priced from ElevenLabs' estimate and refused on it, and the paid call is never made", async () => {
-      const before = host.fake.calls.length
-      const outcome = await generate(await session(host), SPEECH, { prompt: "hello there", voice_id: "voice_example", generations_count: 1 })
-      expect(outcome).toHaveProperty("refused")
-      expect((outcome as { refused: string }).refused).toContain("SPEND_CAP_REACHED")
-      expect((outcome as { refused: string }).refused).toContain(`${IMAGE_CREDITS} credits`)
-      // The estimate ran, and nothing else: the generation itself was never sent.
-      expect(host.fake.calls.slice(before)).toEqual([SPEECH])
-      expect(host.fake.inputs.at(-1)!.arguments).toMatchObject({ estimate_only: true })
-    })
-
-    test("an argument ElevenLabs' own schema does not have is PRICE_UNKNOWN, and not even the estimate is sent", async () => {
-      const before = host.fake.calls.length
-      const outcome = await generate(await session(host), SPEECH, { text: "x".repeat(60) })
-      expect(outcome).toHaveProperty("refused")
-      expect((outcome as { refused: string }).refused).toContain("PRICE_UNKNOWN")
-      expect(host.fake.calls.slice(before)).toEqual([])
-    })
   })
 })
 
@@ -322,38 +240,6 @@ describe(`elevenlabs_save_media on OpenCode ${HOST_VERSION}`, () => {
     const outcome = await save(await session(host), "https://example.com/a.mp3")
     expect(outcome.ok).toBe(false)
     expect((outcome as { error: string }).error).toContain("MEDIA_URL_INVALID")
-  })
-})
-
-// a figure that arrives only in the text part is still the charge.
-describe(`a text-only credit figure on OpenCode ${HOST_VERSION}`, () => {
-  let host: Host
-  beforeAll(async () => {
-    // Five credits a generation, so two takes are estimated at 10 and reserved at 10, and the fake's text part
-    // reports 120. The reservation used to come from the plugin's own rate table; it is ElevenLabs' estimate now,
-    // and what this proves is unchanged: the figure the result states is the charge.
-    host = await startHost({ fake: { reportsCreditsInText: true, estimateCreditsPerGeneration: 5 }, options: { dailyCreditCap: 100_000, sessionCreditCap: 10_000 } })
-    await elevenlabsTools(host)
-  })
-  afterAll(() => host?.close())
-
-  const speak = async (prompt: string) => {
-    const sessionID = await session(host)
-    const args = { prompt, voice_id: "voice_example", generations_count: 2 }
-    const outcome = await codeMode(host, sessionID, `const r = await tools.elevenlabs[${JSON.stringify(SPEECH)}](${JSON.stringify(args)}); throw new Error("SEEN " + JSON.stringify(r))`)
-    expect(outcome).toHaveProperty("seen")
-    return (outcome as { seen: { cost: { credits: number; basis: string } } }).seen.cost
-  }
-
-  test("the model path charges the figure it was told, not the pre-call bound", async () => {
-    // Two takes at five reserve 10, and the fake reports 120 in its text part: the figure is the charge.
-    expect(await speak("hello")).toMatchObject({ credits: 120, basis: "exact" })
-  })
-
-  test("a figure more than ten times the reservation is charged, not refused", async () => {
-    // Correcting Ruling B's ceiling, which kept the 10-credit reservation here: 120 is twelve times the hold, and a
-    // charge the plugin under-reserved is the owner's money all the same. Both calls are in the day's total.
-    expect(await speak("hello")).toMatchObject({ credits: 120, basis: "exact", dailySpent: 240 })
   })
 })
 

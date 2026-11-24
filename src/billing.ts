@@ -461,7 +461,7 @@ interface LedgerInput {
   readonly writerId?: string
 }
 
-/** The ledger both paths share: the model's hooks and a script's shapers reserve, settle and record the same totals. */
+/** The ledger the tools-RPC shapers use to reserve, settle and record their totals. */
 export class Ledger {
   private readonly local: Book
   private readonly writerId: string
@@ -989,7 +989,7 @@ export function estimatePrice(
  */
 export const isEstimate = (tool: string, input: Record<string, unknown>) => ESTIMATE_TOOLS.includes(tool.toLowerCase()) && input.estimate_only === true
 
-/** The layer between a hook and the plugin: what the model path and the script path both ask. */
+/** The layer between a shaper and the plugin: what a tools-RPC call asks. */
 interface GuardCall {
   readonly sessionID: string
   readonly agent: string
@@ -1001,8 +1001,6 @@ interface GuardCall {
 interface GuardInput {
   readonly ledger: Ledger
   readonly caps: () => Caps
-  /** The server's own estimate, for a tool that accepts `estimate_only`. Only the model path can await it. */
-  readonly estimate?: (tool: string, input: Record<string, unknown>, call: GuardCall) => Promise<Price | undefined>
 }
 
 interface Quote {
@@ -1040,19 +1038,12 @@ export function isEstimateResult(result: { readonly output?: unknown; readonly t
 }
 
 /**
- * Prices a call, clamps its generation count, and reserves the price before it is sent. The reservation is what makes a
- * parallel turn safe: the check and the hold happen with no await between them.
- *
- * The model path awaits a real `estimate_only` call for image and video, once, and remembers the price for the arguments;
- * the script path is synchronous and can only use the table or a price the script itself fetched. Both refuse rather
- * than guess.
+ * Prices a call through the tools RPC's synchronous shaper, clamps its generation count, and reserves the price before
+ * it is sent. The reservation is what makes a parallel turn safe: the check and the hold happen with no await between
+ * them. This path cannot await ElevenLabs for an estimate: the only price it has is one a call on this ledger already
+ * fetched for exactly these arguments, so a script prices its own call by sending `estimate_only` first.
  */
-export async function quoteCall(input: GuardInput, tool: string, args: Record<string, unknown>, call: GuardCall): Promise<Quote> {
-  return quote(input, tool, args, true, call)
-}
-
-/** The synchronous form, for a path that cannot await: the tools RPC's shapers. */
-export function quoteCallSync(input: Omit<GuardInput, "estimate">, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
+export function quoteCallSync(input: GuardInput, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
   return quoteSync(input, tool, args, call)
 }
 
@@ -1109,40 +1100,7 @@ function estimateRefused(tool: string, obstacle: string) {
   )
 }
 
-async function quote(context: GuardInput, tool: string, args: Record<string, unknown>, mayEstimate: boolean, call: GuardCall): Promise<Quote> {
-  const free = unpriced(context, tool, args)
-  if (free !== undefined) return free
-  const caps = context.caps()
-  // No cap: no estimate is sent and nothing is refused, clamped or reserved. The result alone sets the cost line.
-  if (!capped(caps)) return { price: UNPRICED, tracked: false }
-  // An argument no allowlist has is refused before the estimate is asked for, not after: the estimate answers for the
-  // arguments it is sent, so an argument the server's own schema does not have would be priced around rather than
-  // priced. It is also one fewer flow created in the workspace for a call that is going to be refused.
-  // A count that cannot be read multiplies whatever one generation costs by an unknown, so no price for these
-  // arguments means anything — whoever it came from. Checked here rather than only inside `estimatePrice`, so a price
-  // this ledger already holds cannot carry a call past it either.
-  const obstacle = priceObstacle(tool, args)
-  if (obstacle !== undefined) throw unknownPrice(tool, priced(tool), obstacle)
-  // A remembered estimate is ElevenLabs' own figure for exactly these arguments, minutes old at most. Using it first
-  // is not only cheaper: every estimate creates a flow and a node in the workspace, so a second one for the same
-  // arguments leaves a second flow behind to say what the first already said.
-  let price = context.ledger.rememberedPrice(tool, args)
-  if (price === undefined && mayEstimate && priced(tool) && context.estimate) {
-    price = await context.estimate(tool, args, call)
-    if (price) context.ledger.rememberPrice(tool, args, price)
-  }
-  if (price === undefined || !(price.credits > 0)) throw unknownPrice(tool, priced(tool), priceObstacle(tool, args))
-  // This path can await, so it decides from the store rather than from this process's memory: a charge another
-  // location or another OpenCode recorded is merged in first. The check and the hold inside `reserve` stay
-  // synchronous, so nothing slips between them.
-  await context.ledger.refresh()
-  price = clamp(price, caps, args, context.ledger.spend(call.sessionID))
-  // The hold is in the store before the call is dispatched, so a crash cannot lose a reservation for a call that ran.
-  await context.ledger.reserve(call.id, call.sessionID, price.credits, caps)
-  return { price, tracked: true }
-}
-
-function quoteSync(context: Omit<GuardInput, "estimate">, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
+function quoteSync(context: GuardInput, tool: string, args: Record<string, unknown>, call: GuardCall): Quote {
   const free = unpriced(context, tool, args)
   if (free !== undefined) return free
   const caps = context.caps()

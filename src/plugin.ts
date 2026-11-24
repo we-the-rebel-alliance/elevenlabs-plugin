@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto"
 import { Plugin, type Mcp } from "@opencode/plugin"
 import { readBalance, readKey, registerBalanceIntegration } from "./balance.js"
-import { appendLine, capped, costLine, costValue, estimatePrice, isEstimate, Ledger, LEDGER_REFRESH_MS, quoteCall, settlementOf, type Caps, type Price } from "./billing.js"
+import { Ledger, LEDGER_REFRESH_MS, type Caps } from "./billing.js"
 import {
   DISPLAY_NAME,
   errorText,
@@ -19,7 +18,6 @@ import { registerToolsRpc, setToolRuntime, shapersFor, METHODS, type ToolRuntime
 import { watchIntegration } from "./integration.js"
 import { addSaveTool } from "./media/tool.js"
 import { findOldSignIns, registerOldSignIns } from "./old-sign-ins.js"
-import { mustPrice, spends } from "./elevenlabs-tools.js"
 import { parseOptions, type ParsedOptions } from "./options.js"
 import { reasonOf } from "./redact.js"
 import { defaultRules, registerDefaultRules } from "./permissions.js"
@@ -87,7 +85,7 @@ const LISTED_OTHERS = 5
 
 /**
  * The other `mcp.servers` entries that point at one of ElevenLabs' own addresses. OpenCode treats each as its
- * own server with its own tool prefix, so this plugin's hooks never see their calls and its credit caps do not bind
+ * own server with its own tool prefix, so this plugin does not see their calls and its tools-RPC caps do not bind
  * them. Nothing is changed: a second entry is the owner's to keep, and status only names it.
  */
 export function otherElevenlabsServers(entries: readonly (readonly [string, { readonly type: string; readonly url?: string }])[]) {
@@ -132,79 +130,6 @@ export function registerServer(
   })
 }
 
-/**
- * Whether the money guard runs for a server entry. It is true for every entry that is ElevenLabs' — the plugin's
- * own, the user's adopted one, and a stale entry at another region's URL, which OpenCode still connects and still lists
- * tools for. Only a server at another vendor's URL is not ours to price.
- */
-export const guardsSource = (source: ServerSource | undefined) => source !== undefined && source.type !== "conflict"
-
-/**
- * The tool name without the server prefix, lowercased, or undefined when the call is not one of this server's. Case is
- * folded on both halves: the prefix, as the permission rules fold it, and the name, so every price lookup and
- * every remembered estimate downstream is keyed the one way.
- *
- * Only this plugin's own server entry is stripped. A second MCP entry pointing at ElevenLabs under another name is a
- * different server to OpenCode, and the caps do not reach it; status names it when one exists.
- */
-export const toolOf = (id: string) =>
-  id.toLowerCase().startsWith(`${SERVER_NAME}_`) ? id.slice(SERVER_NAME.length + 1).toLowerCase() : undefined
-
-/** The line a generation's result carries: the link dies in about two hours, so say how to keep the file. */
-const EXPIRY_LINE =
-  "This link expires in about two hours. Save it with elevenlabs_save_media to keep the file; generating it again spends more credits."
-
-/** True when a result carries an http link, so the expiry line is worth saying. */
-const hasLink = (result: { readonly content?: unknown }) => {
-  const text = typeof result.content === "string" ? result.content : Array.isArray(result.content) ? result.content.map((part: { text?: string }) => part.text ?? "").join("\n") : ""
-  return /https:\/\/\S+/.test(text)
-}
-
-/**
- * The estimate the model path may await: ElevenLabs' own price for exactly these arguments, through the host's
- * executor. An estimate is not a read. It creates a flow and a node in the workspace, and it runs through the
- * executor, where no permission rule stops it — so this asserts the paid call's own action first. Under
- * `access: "read-only"` the generation is denied and no estimate runs for it; under `"ask-changes"` the estimate runs
- * only once the generation itself has been allowed (README, SECURITY.md).
- */
-const estimatorFor = (ctx: Plugin.Context) => async (tool: string, input: Record<string, unknown>, call: { sessionID: string; agent: string; messageID: string; id: string }): Promise<Price | undefined> => {
-  // `toolOf` folded the name's case, so the executor is matched the same way: a server that listed the name in another
-  // case still gets its own estimate, rather than being refused for want of a price.
-  const id = `${SERVER_NAME}_${tool}`
-  const listed = await ctx.tool.list()
-  const executor = listed.find((entry) => entry.id === id) ?? listed.find((entry) => entry.id.toLowerCase() === id)
-  if (!executor) return undefined
-  try {
-    await ctx.permission.assert({
-      sessionID: call.sessionID,
-      agent: call.agent,
-      action: id,
-      resources: ["*"],
-      source: { type: "tool", messageID: call.messageID, id: call.id },
-    })
-  } catch {
-    // The generation is not allowed here, so neither is the estimate that would price it. The guard then refuses the
-    // call with PRICE_UNKNOWN, and the host refuses the generation itself for the same reason.
-    return undefined
-  }
-  try {
-    const result = await executor.execute({ ...input, estimate_only: true } as never, {
-      sessionID: call.sessionID,
-      agent: call.agent,
-      messageID: call.messageID,
-      id: `estimate:${randomUUID()}`,
-      signal: new AbortController().signal,
-      progress: async () => {},
-    } as never)
-    const normalised = result as { output?: unknown; content?: unknown }
-    const text = typeof normalised.content === "string" ? normalised.content : Array.isArray(normalised.content) ? normalised.content.map((part: { text?: string }) => part.text ?? "").join("\n") : ""
-    return estimatePrice(tool, input, { ...(normalised.output === undefined ? {} : { output: normalised.output }), text })
-  } catch {
-    // A server that refuses the flag, or a link that broke: the guard then refuses rather than guessing a price.
-    return undefined
-  }
-}
-
 export function createElevenlabsPlugin(seam: ElevenlabsSeam = {}) {
   return Plugin.define({
     id: PLUGIN_ID,
@@ -239,11 +164,6 @@ export function createElevenlabsPlugin(seam: ElevenlabsSeam = {}) {
       // own tool lives in the same namespace and is added once.
       // `managed` decides whether this plugin owns the server entry: it may rename it and add its namespace and tool.
       const managed = () => source?.type === "plugin" || source?.type === "adopted"
-      /**
-       * The guard's own predicate: every ElevenLabs entry is guarded, a stale region entry included, because
-       * OpenCode still connects it and still lists its tools. Only another vendor's server at the same name is not ours.
-       */
-      const guarded = () => source !== undefined && source.type !== "conflict"
       await ctx.tool.transform((editor) => {
         if (!managed()) return
         editor.namespace({ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION })
@@ -336,90 +256,11 @@ export function createElevenlabsPlugin(seam: ElevenlabsSeam = {}) {
         shapers: shapersFor(runtime),
       })
 
-      // The spending guard, on both paths. `execute.before` can change an MCP call's arguments and refuse it before it
-      // is sent; `execute.after` charges the ledger and adds the cost line. Scripts go through the block's shapers.
-      const estimate = estimatorFor(ctx)
-      const pending = new Map<string, { readonly price: Price; readonly tracked: boolean }>()
-      const stopBefore = await ctx.tool.hook("execute.before", async (event) => {
-        const tool = toolOf(event.tool)
-        if (!guarded() || tool === undefined) return
-        const args = (typeof event.input === "object" && event.input !== null ? event.input : {}) as Record<string, unknown>
-        if (isEstimate(tool, args) || !mustPrice(tool)) return
-        // With no cap, a name the table does not classify runs as it is: nothing says it spends, so it gets no price
-        // and no cost line. With a cap it is refused below, because nothing can price it.
-        if (!capped(caps()) && !spends(tool)) return
-        // With a cap: price, clamp, and reserve before dispatch, so a call that starts at the same time sees this
-        // reservation. With none: no estimate is sent, nothing is refused, and the result alone sets the cost line.
-        const quoted = await quoteCall({ ledger, caps, estimate }, tool, args, {
-          sessionID: event.sessionID,
-          agent: event.agent,
-          messageID: event.messageID,
-          id: event.id,
-        })
-        pending.set(event.id, quoted)
-      })
-      const stopAfter = await ctx.tool.hook("execute.after", async (event) => {
-        const tool = toolOf(event.tool)
-        if (!guarded() || tool === undefined) return
-        const args = (typeof event.input === "object" && event.input !== null ? event.input : {}) as Record<string, unknown>
-        const quoted = pending.get(event.id)
-        pending.delete(event.id)
-        const before = quoted?.price
-        // An estimate is free and is not a charge: remember it, so the paid call that follows can be priced.
-        if (isEstimate(tool, args)) {
-          if (event.status === "completed") {
-            const price = estimatePrice(tool, args, { ...(event.result.output === undefined ? {} : { output: event.result.output }), ...(event.result.content === undefined ? {} : { content: event.result.content }) })
-            if (price) ledger.rememberPrice(tool, args, price)
-          }
-          return
-        }
-        if (!mustPrice(tool)) return
-        // An unclassified name with no cap was never priced, and nothing says it spent.
-        if (quoted === undefined && !spends(tool) && ledger.recorded(event.id) === undefined) return
-        // A failure is settled at the reserved price. The plugin cannot tell a free failure from a billed one, and
-        // over-counting is the safe side for a cap. A missing result must not free the budget. With no cap nothing
-        // was reserved, and a failure records nothing.
-        if (event.status !== "completed") {
-          if (quoted !== undefined && !quoted.tracked) return
-          const reserved = ledger.reservation(event.id)?.credits ?? before?.credits
-          if (reserved !== undefined && reserved > 0) ledger.settle(event.id, event.sessionID, reserved)
-          return
-        }
-        // The floor is the ledger's own row for this call, not this hook's memory of it: once the first result has
-        // been settled `pending` is empty and the hold is a charge, and a second result for the same call measured
-        // against nothing would read as a raise above zero and lower the charge to itself.
-        const recorded = ledger.recorded(event.id)
-        const floor = recorded?.credits ?? before?.credits ?? 0
-        const settled = settlementOf(event.result, floor, caps().dailyCreditCap, recorded?.kind ?? "hold")
-        // A figure the plugin would not settle on, and one it settled on but had to flag, both say so in the cost
-        // line: the owner sees why the reservation stands, or that a raise was far above what was reserved.
-        const parts = settled.credits === floor
-          ? [...(before?.parts ?? []), ...(settled.note === undefined ? [] : [settled.note])]
-          : settled.note === undefined
-            ? []
-            : [settled.note]
-        const price: Price = settled.credits === floor && before && settled.note === undefined
-          ? before
-          : { credits: settled.credits, basis: settled.credits > 0 && settled.credits !== floor ? "exact" : "at-most", parts }
-        const spend = settled.credits <= 0 && floor <= 0 ? ledger.spend(event.sessionID) : ledger.settle(event.id, event.sessionID, settled.credits, settled.attested)
-        const line = costLine(price, spend, caps())
-        appendLine(event.result, line)
-        // The structured `cost` beside the output, as the tools RPC does: a Code Mode program reads the output, not the
-        // text parts, so the price travels with it.
-        const output = (event.result as { output?: unknown }).output
-        if (output !== null && typeof output === "object" && !Array.isArray(output)) {
-          ;(output as Record<string, unknown>).cost = costValue(price, spend, caps())
-        }
-        if (hasLink(event.result)) appendLine(event.result, EXPIRY_LINE)
-      })
-
       const stopWatch = watchIntegration(ctx, managed)
       return async () => {
         clearInterval(refreshing)
         setToolRuntime(undefined)
         await stopWatch()
-        await stopBefore.dispose()
-        await stopAfter.dispose()
         await stopTools()
       }
     },

@@ -14,8 +14,7 @@
  * Setup registers the source contract's two methods beside the table (src/events.ts): `events_list`
  * (`elevenlabs_events_list`, class `read`) and `probe` (`elevenlabs_probe`, class `read`).
  *
- * The executor bypasses `execute.before` and `execute.after` hooks, so `shapeInput` runs before dispatch and
- * `shapeResult` after it, whatever those hooks do on the model path.
+ * No OpenCode tool hook runs on this path, so `shapeInput` runs before dispatch and `shapeResult` after it.
  */
 import { randomUUID } from "node:crypto"
 import {
@@ -70,7 +69,7 @@ const classOf = (name: string): MethodClass => {
   }
 }
 
-/** What the script path needs from setup: the same ledger and caps the model path uses, and the tool's own seam. */
+/** What the tools-RPC path needs from setup: the ledger, the caps and the tool's own seam. */
 export interface ToolRuntime {
   readonly ledger: Ledger
   readonly caps: () => Caps
@@ -155,11 +154,9 @@ export function shapeResult(method: string, result: McpResult, call: ShapeCall):
 }
 
 /**
- * What the model path's `execute.before` hooks do to an MCP call's arguments, which the executor skips: it prices the
- * call, clamps its generation count and **reserves** the price before dispatch, so a second call that starts at the same
- * time cannot spend the same budget. It is synchronous by contract; image and video have no published price, so a script
- * prices them itself first, and the model path gets the same price through the hook, which may await the server's own
- * estimate.
+ * The tools-RPC shapers: they price a script's call from a remembered ElevenLabs estimate, clamp its generation count
+ * and **reserve** the price before dispatch, so a second call that starts at the same time cannot spend the same
+ * budget. They are synchronous by contract, so a script prices its own call with `estimate_only` first.
  */
 export function shapersFor(runtime: ToolRuntime): LocationShapers {
   /**

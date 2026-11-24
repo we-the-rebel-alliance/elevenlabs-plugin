@@ -3,7 +3,7 @@
 Every option is optional. The plugin reads them from `opencode.json`:
 
 ```json
-{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0", "options": { "access": "all" } }] }
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>", "options": { "access": "all" } }] }
 ```
 
 ## Options
@@ -12,8 +12,8 @@ Every option is optional. The plugin reads them from `opencode.json`:
 | --- | --- | --- | --- |
 | `access` | `"all"`, `"ask-changes"`, `"read-only"` | `"all"` | The permission posture the generated default rules express. |
 | `region` | `"global"`, `"us"`, `"eu"`, `"in"`, `"sg"` | `"global"` | Which ElevenLabs environment's MCP server to register. Changing it needs a new sign-in; the earlier region's sign-in stays stored, and status names it with the command that removes it. |
-| `sessionCreditCap` | a whole number of credits, or `null` | `null` (no cap) | Opt-in: the most one session may spend. |
-| `dailyCreditCap` | a whole number of credits, or `null` | `null` (no cap) | Opt-in: the most this plugin may spend in a rolling 24 hours in this data directory, across sessions, scripts and restarts. Two machines do not share it. |
+| `sessionCreditCap` | a whole number of credits, or `null` | `null` (no cap) | Opt-in: the most priced tools-RPC calls in one session may spend. |
+| `dailyCreditCap` | a whole number of credits, or `null` | `null` (no cap) | Opt-in: the most priced tools-RPC calls may spend in a rolling 24 hours in this data directory, across sessions and restarts. Two machines do not share it. |
 | `mediaRoot` | a path, `~` for your home folder | `"~/Downloads/elevenlabs"` | Where `elevenlabs_save_media` writes. Created on first use with mode 0700. |
 | `maxMediaBytes` | a whole number of bytes | `209715200` (200 MB) | The largest file the save tool writes. |
 | `conversations` | `"full"`, `"summary"`, `"off"` | `"full"` | How much of a call's history the conversation reads may return. |
@@ -32,38 +32,34 @@ Nineteen tools can bill the workspace: `creative_generate_speech`, `creative_gen
 `agents_retry_batch_call`, `agents_outbound_call`, `agents_run_tests`, `agents_run_attached_tests`, `agents_generate`,
 `agents_generate_test_from_conversation`, `agents_compute_kb_rag_index`, `agents_query_knowledge_base_rag` and
 `creative_create_brand_kit_from_website`. A price is ElevenLabs' own figure: the same call with `estimate_only: true`.
-There is no rate table in this plugin. Every paid result carries a cost line, with or without a cap.
+There is no rate table in this plugin.
 
-The first seven take `estimate_only`. The other twelve do not, so with no cap they run unpriced, and while a cap you set
-is on they are refused (`PRICE_UNKNOWN`). `creative_execute_sandbox` says it bills for each second its command runs, and
-the batch-call and outbound-call tools place real phone calls. The rest are counted as spending because ElevenLabs'
-catalogue says neither way about them and they describe server-side work it plausibly bills — a test run's
-conversations, an LLM writing an agent or a test, embedding a knowledge-base document, running a RAG query, reading a
-public website — and the plugin counts silence against the owner's money rather than for it.
+**Priced calls through the tools RPC are the only calls this plugin prices, caps or annotates.** A script or app calls
+`elevenlabs.tools`; its result carries a `cost` object and a cost line. An agent or Code Mode call goes straight to
+ElevenLabs: its own result stands, and status reports only what priced tools-RPC calls recorded plus the optional
+workspace balance.
 
-With no cap, no estimate is sent before a paid call: no flow or node is left in the workspace for it, and the call
-raises no permission prompt beyond its own. It runs at whatever size it asks for, calls of one method run side by side,
-and each is recorded at the figure its result reports, or its cost line says `Credits: not reported`. An explicit
-`estimate_only` call still answers with ElevenLabs' figure, and is never reported as a charge.
+The first seven tools take `estimate_only`. The other twelve do not, so with no cap they run unpriced, and while a cap
+you set is on the tools RPC refuses them (`PRICE_UNKNOWN`). `creative_execute_sandbox` says it bills for each second its
+command runs, and the batch-call and outbound-call tools place real phone calls. The rest are counted as spending
+because ElevenLabs' catalogue says neither way about them and they describe server-side work it plausibly bills — a
+test run's conversations, an LLM writing an agent or a test, embedding a knowledge-base document, running a RAG query,
+reading a public website — and the plugin counts silence against the owner's money rather than for it.
 
-While a cap you set is on, the plugin sends the estimate itself before each paid call.
+With no cap, a tools-RPC call is not priced first: nothing is estimated, held or refused, and its result carries a cost
+line with the figure it reports itself, or `Credits: not reported`. An explicit `estimate_only` call still answers with
+ElevenLabs' figure and is never recorded as a charge.
 
-While a cap you set is on, a priced call is clamped to the number of generations the caps afford, **reserved** in the
-ledger before it is sent, and settled into a charge when its result arrives, so two calls that start together cannot
-both spend the same budget. A failure is charged the reserved price. The daily cap is one total for this data
-directory; two machines do not share it.
+While a cap you set is on, a tools-RPC call must already have a price. A script sends the same call with
+`estimate_only: true` first, and the shaper uses that remembered figure for ten minutes. The call is then clamped to
+the number of generations the caps afford, **reserved** in the ledger before it is sent, and settled into a charge when
+its result arrives, so two calls that start together cannot both spend the same budget. A failure is charged the
+reserved price. The daily cap is one total for this data directory; two machines do not share it.
 
-A call the plugin cannot price is refused with `PRICE_UNKNOWN` while a cap is on, never run unpriced: a failed or
-missing estimate, an argument ElevenLabs' own schema for that tool does not have, any name the table does not know, and
-the twelve spending tools ElevenLabs offers no estimate for — every one in the list above after
+A tools-RPC call the plugin cannot price is refused with `PRICE_UNKNOWN` while a cap is on, never run unpriced: a
+missing remembered estimate, an argument ElevenLabs' own schema for that tool does not have, any name the table does
+not know, and the twelve spending tools ElevenLabs offers no estimate for — every one in the list above after
 `creative_transcribe_audio`.
-
-Under a cap, the estimate is sent only where the paid call could run, because it is a call of its own: it costs nothing, but it
-creates a flow and a node in the workspace. Under `access: "ask-changes"` the permission you answer is the generation's
-own, and nothing is estimated if you refuse. That permission is asked twice for one paid call — once before the
-estimate, once for the generation — so you may see two prompts for it; whether OpenCode folds them into one is
-OpenCode's to decide and this plugin has not measured it. The figure is then remembered for ten minutes, so the paid
-call does not ask for a second one.
 
 `access: "read-only"` denies every tool that can spend, `creative_transcribe_audio` included: a transcription runs on a
 node in a flow, and billing a workspace is not a read.

@@ -78,7 +78,7 @@ there. Adding a rule replaces any rule with the same `string_to_replace`. Adding
 
 Create a test with `agents_create_test`; inspect past runs with `agents_list_test_runs` and `agents_get_test_run`.
 `agents_run_tests` and `agents_run_attached_tests` **spend credits**: they make the agent hold conversations, and
-ElevenLabs offers no estimate for them, so say so before running one and report the cost line its result carries.
+ElevenLabs offers no estimate for them, so say so before running one and report what its result says it cost.
 `agents_generate` (an LLM writes a whole agent) and `agents_generate_test_from_conversation` are counted as spending too. A deployment moves live traffic:
 `agents_create_deployment` after a merge, not before.
 

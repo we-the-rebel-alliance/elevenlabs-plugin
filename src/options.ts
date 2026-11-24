@@ -32,9 +32,9 @@ interface Options {
   readonly access: Access
   /** The region whose MCP server the plugin registers and signs in to. */
   readonly region: Region
-  /** The most credits one session (one conversation with the model) may spend. Null, the default, is no cap. */
+  /** The most credits priced tools-RPC calls in one session may spend. Null, the default, is no cap. */
   readonly sessionCreditCap: CreditCap
-  /** The most credits this plugin may spend in any rolling 24 hours in this data directory. Null, the default, is no cap. */
+  /** The most credits priced tools-RPC calls may spend in any rolling 24 hours in this data directory. Null, the default, is no cap. */
   readonly dailyCreditCap: CreditCap
   /** Where `elevenlabs_save_media` writes, with `~` expanded when the file is written. */
   readonly mediaRoot: string
@@ -46,7 +46,7 @@ interface Options {
 
 export type ParsedOptions = Options
 
-const EXAMPLE = `"plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0", "options": { "access": "read-only" } }]`
+const EXAMPLE = `"plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>", "options": { "access": "read-only" } }]`
 const ACCEPTED = {
   allowUntestedHost: "true or false (the default)",
   access: `"all" (the default), "ask-changes" or "read-only"`,

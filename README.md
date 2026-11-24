@@ -15,8 +15,10 @@ ElevenLabs is a trademark of Eleven Labs Inc.; this unofficial plugin is not end
 
 ## Install
 
+Install from a release: `opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<version>`. The first release on plugin-contract is v0.0.0 (phase 4b).
+
 ```sh
-opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0
+opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<version>
 ```
 
 Run `opencode reload`, or restart OpenCode, then run `/elevenlabs-status`.
@@ -28,7 +30,7 @@ with `opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<versi
 Or add the plugin to `opencode.json` instead, with the same spec:
 
 ```json
-{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0" }] }
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>" }] }
 ```
 
 The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build.
@@ -59,15 +61,14 @@ Ask for what you want in your own words:
 Three skills tell the model when to reach for which part of the plugin: `elevenlabs` for agents, `elevenlabs-calls` for
 what callers said, and `elevenlabs-creative` for speech, images and video. Load the matching one first.
 
-Two tools do more than relay ElevenLabs:
+One tool does more than relay ElevenLabs:
 
 - **`elevenlabs_save_media`** writes a generated file to disk from the signed link a generation returns. The link expires
   about two hours after the generation, so this is how a result is kept. It answers with the path, size, sha256 and, when
   the file states one, the duration; the file itself never enters the conversation.
-- **a spending guard** adds a cost line to every paid result. It prices a call first and refuses one that does not fit
-  only when you set a credit cap.
 
-A script can call the same tools with no model, under the same spending guard:
+A script can call the same tools with no model. The tools RPC prices, caps and annotates its calls in their own result;
+an agent or Code Mode call goes straight to ElevenLabs, whose own result stands:
 
 ```sh
 opencode api post /api/rpc/elevenlabs.tools/agents_list -H "x-opencode-directory:$PWD" -d '{"input":{"sessionID":"ses_…","input":{}}}'
@@ -79,14 +80,14 @@ opencode api post /api/rpc/elevenlabs.tools/agents_list -H "x-opencode-directory
 
 Generations are billed in **credits** against the workspace you signed in with.
 
-- **There is no credit cap unless you set one.** ElevenLabs already refuses a call the workspace's balance cannot pay
-  for, and the permission rules decide whether a paid call runs at all. Each paid result's cost line says what the
-  result reported, or `Credits: not reported`; it never shows a guess. To know a price first, ask for it: an
-  `estimate_only` call.
-- **Caps are opt-in.** Set `sessionCreditCap`, `dailyCreditCap` or both to a whole number of credits to add a bound of
-  your own. A generation that does not fit is refused before it is sent, and a request for more variations than the
-  budget affords is cut to what fits.
-- **A cap bounds this plugin, not your account.** Another OpenCode, another tool or ElevenLabs' own site is outside it.
+- **Priced tools-RPC calls are the only calls this plugin prices.** A script or app calls `elevenlabs.tools`; its
+  result carries a `cost` object and a cost line with the figure the result reported, or `Credits: not reported`. An
+  agent or Code Mode call is ElevenLabs' own result: the plugin does not price, cap or annotate it.
+- **Caps are opt-in.** There is no credit cap unless you set one. Set `sessionCreditCap`, `dailyCreditCap` or both to a whole number of
+  credits to bound priced tools-RPC calls. A call that does not fit is refused before it is sent, and a request for more
+  variations than the budget affords is cut to what fits. The cap does not bound an agent's direct call.
+- **A cap bounds this plugin's tools-RPC calls, not your account.** Another OpenCode, another tool, an agent's direct
+  call or ElevenLabs' own site is outside it.
 - **No dollar figure is derived from credits.**
 - Transcription spends like everything else, and `access: "read-only"` denies it along with every other tool that can
   spend.
@@ -145,7 +146,7 @@ things without a prompt. OpenCode offers three ways to restrict that, and the st
 Options, the permission rules, the status rows and every error code are in [docs/configuration.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/configuration.md).
 
 ```json
-{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0", "options": {
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>", "options": {
   "access": "all",
   "region": "global",
   "conversations": "full",
@@ -167,10 +168,11 @@ the server's `npx … @latest` setup unless the user asks.** The server's text i
 
 ## Known limits
 
-- **The price comes from ElevenLabs.** A call ElevenLabs cannot price is refused rather than guessed while a cap is on.
-  Whether a finished generation reports what it really cost, and in which field, stays unverified until it is measured.
-- **No cap means no pre-flight estimate.** No estimate is sent before a paid call, so a result that reports no figure
-  says `Credits: not reported`; an `estimate_only` call is how to get a price.
+- **The price comes from ElevenLabs.** A priced tools-RPC call ElevenLabs cannot price is refused rather than guessed
+  while a cap is on. Whether a finished generation reports what it really cost, and in which field, stays unverified
+  until it is measured.
+- **No cap means no pre-flight estimate.** The plugin sends no estimate for a tools-RPC call; a result that reports no
+  figure says `Credits: not reported`, and a script gets a price by sending `estimate_only` first.
 - **A region change cannot remove the earlier region's sign-in.** Sign out of it in `/connect` or with the command
   status gives.
 - **Updates are not automatic for a Git install.** Move to a newer release by removing the old entry and adding the
@@ -184,7 +186,7 @@ earlier region, run the `opencode auth logout` command it gives as well:
 ```sh
 opencode mcp logout elevenlabs
 opencode auth list
-opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0
+opencode plugin remove github:we-the-rebel-alliance/elevenlabs-plugin#v<version>
 ```
 
 Files already saved under `mediaRoot` stay. Remove them yourself if you no longer want them.

@@ -86,7 +86,7 @@ describe("the doctor", () => {
     expect(report).toContain("ok   server: connected")
     expect(report).toContain("ok   tools: 1 listed")
     expect(report).toContain("ok   skills: 3 of 3 loaded")
-    expect(report).toContain("ok   spend: 1,200 credits in the last 24 hours of 10,000")
+    expect(report).toContain("ok   spend: 1,200 credits recorded from priced tools-RPC calls in the last 24 hours of 10,000")
     expect(report).toContain("balance: no API key added")
     expect(report).toContain("Everything checked out. Nothing to do.")
     expect(report).not.toContain("FAIL")

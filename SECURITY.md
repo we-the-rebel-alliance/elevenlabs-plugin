@@ -46,20 +46,20 @@ Report privately through GitHub's private vulnerability reporting on
   work ElevenLabs plausibly bills; silence is read against your money rather than for it. An image or
   video call returns **four variations by default** and speech returns **two takes**, so one call can be four billable
   generations, and asking for a retry starts and charges another. **Transcription bills too**, and it is a *change*,
-  not a read: `access: "read-only"` denies it along with every other tool that can spend. Every paid result carries a
-  cost line with the figure the result reported, or `Credits: not reported`. **No credit cap is set by default**, and
-  then no estimate is sent before a paid call: the bounds are the workspace's balance at ElevenLabs and the permission rules (`ask-changes` asks
-  for every paid call, `read-only` denies it, and a script's `ask` is refused). The caps (`sessionCreditCap`,
-  `dailyCreditCap`) are opt-in; once set, the plugin asks ElevenLabs for an estimate of each paid call, reserves it
-  before the call and bounds this plugin, not your account. Twelve of the nineteen have no estimate — every one but the
-  seven that take `estimate_only` — so they run unpriced, and while a cap you set is on they are refused instead.
-- **An estimate is a call of its own.** Without a cap the plugin sends none; one the model or a script asks for is theirs. It costs nothing — measured against a real workspace, two of them moved the
-  balance by zero — but each one creates a flow and a node in the workspace. Under a cap, the plugin asks for one per set of
-  arguments, keeps it for ten minutes, and sends it only where the paid call is permitted: the permission it asks for
-  is the generation's own, never one of its own, and under `read-only` nothing is estimated because nothing may be
-  generated. That permission is raised twice for one paid call — before the estimate and again for the generation — so
-  under `ask-changes` expect up to two prompts. Earlier releases promised one; whether a host folds them has never been
-  measured here.
+  not a read: `access: "read-only"` denies it along with every other tool that can spend. **Priced tools-RPC calls are the
+  only calls this plugin prices.** A script's priced result carries a cost line with the figure it reported, or
+  `Credits: not reported`; an agent or Code Mode call is ElevenLabs' own result, not priced, capped or annotated by
+  this plugin. **No credit cap is set by default**, and then the tools RPC sends no estimate before a call: the bounds
+  are the workspace's balance at ElevenLabs and the permission rules (`ask-changes` asks for every paid call,
+  `read-only` denies it, and a script's `ask` is refused). The caps (`sessionCreditCap`, `dailyCreditCap`) are opt-in;
+  once set, they bound priced tools-RPC calls, not an agent's direct call. A script prices its own call with
+  `estimate_only` first, and the shaper reserves that remembered figure before the call. Twelve of the nineteen have no
+  estimate — every one but the seven that take `estimate_only` — so a tools-RPC call to them runs unpriced, and while a
+  cap you set is on it is refused instead.
+- **An estimate is a call of its own.** A script sends its own `estimate_only` call; the plugin sends none. It costs
+  nothing — measured against a real workspace, two of them moved the balance by zero — but each one creates a flow and
+  a node in the workspace. Under a cap the shaper remembers the figure for ten minutes and reuses it for the paid call.
+  The permission rules decide whether the script's calls run; the plugin raises no prompt of its own.
 - **What a cap cannot decide.** Exactly: **within one OpenCode the caps are exact; across OpenCodes a cap is crossed
   by at most one call's reservation for each one deciding before its read of the others' holds lands, so eight of them
   at 3,000 credits a call can spend 31,000 against a 10,000 cap; every OpenCode reads the store behind each call it
@@ -70,11 +70,11 @@ Report privately through GitHub's private vulnerability reporting on
   on one data directory each admit against what they have read. Nothing is lost to that race, because every hold and
   every charge has its own key that only its own OpenCode rewrites and a total is a scan and a sum, not a merge. The
   check and the hold are taken in memory with nothing awaited between them, so two calls in one process cannot both
-  pass; the hold's key is then written and awaited before the call is dispatched, and a write that fails refuses the
-  call. Set the caps with the bound you can afford to be crossed once per extra OpenCode, not as a hard limit on the
+  pass; the hold's key is then written behind the call, and a write that fails cannot refuse a call already dispatched.
+  Set the caps with the bound you can afford to be crossed once per extra OpenCode, not as a hard limit on the
   account; the account's own limits are at ElevenLabs. A cap also binds one server entry: the `elevenlabs` entry this plugin manages. A second MCP
-  entry pointing at ElevenLabs under another name serves its tools under that name's prefix, which this plugin's hooks
-  never see, so its calls are priced by nothing here. `/elevenlabs-status` names such an entry when one exists.
+  entry pointing at ElevenLabs under another name serves its tools under that name's prefix, which this plugin never
+  sees, so its calls are priced by nothing here. `/elevenlabs-status` names such an entry when one exists.
 - **Change live agents.** `agents_update` publishes straight to the branch it targets, `main` by default. It is not
   staged as a draft, and the plugin cannot undo it. A prompt edit changes what a production agent says to real callers on
   the next call. `agents_publish_draft` makes every change staged in a draft live at once.

@@ -6,7 +6,7 @@ contract work (a `capabilities` manifest, `accounts`, plugin-kit and releases) c
 
 ## Layout and checks
 
-- `src/` is the plugin, `test/` the suites, `scripts/` the checks. `npm run check` runs typecheck, unit, conformance,
+- `src/` is the plugin, `test/` the suites, `scripts/` the checks. `npm run check` runs typecheck, unit, conformance, kit,
   build, icons, host, pack, forbidden, copies, whitelist and actionlint, in that order.
 - The one tested OpenCode release is `2.4.1`, pinned in `devDependencies` and `src/constants.ts`. `npm run check` runs
   the host and pack stages on it, with no older-host matrix.
@@ -47,7 +47,7 @@ Checked by `scripts/check-forbidden.mjs` across `src/`, `test/`, `scripts/` and 
   each agent's retention, which decides its `gap`); every tool it adds must be a free read, `permission.operations`
   must name exactly what it reads, and the conformance stage (`npm run conformance`) fails otherwise.
 - The tool table is `src/elevenlabs-tools.ts` and nothing else: the default rules, the tools RPC, status, the spending
-  guard, the copied Jelly declaration and the tests all derive from it.
+  guard, the copied legacy declaration and the tests all derive from it.
 - Every error the plugin raises has a code from `PLUGIN_CODES`, and the configuration guide's table must match it
   exactly.
 - The plugin never sees the OAuth token, and never prints one. Anything read from the network goes through

@@ -1,4 +1,4 @@
-// The Jelly declaration against the committed live capture, test/fixtures/live-tools.json: Jelly enforces what
+// The legacy declaration against the committed live capture, test/fixtures/live-tools.json: the declaration carries what
 // package.json declares without loading the plugin, so every tool ElevenLabs serves is declared with ElevenLabs' own
 // readOnly, and every declared tool is served. test/fixtures/tool-registry.json holds the plugin's own tool and the one
 // reasoned exception, in the shape the family's shared drift check reads, so that check can replace this file.

@@ -30,13 +30,8 @@ const stages = {
   unit: () => run("bun", ["test", "./test/unit"]),
   // The source contract's conformance kit over the declared source, offline; writes reports/conformance-report.json.
   conformance: () => run("bun", ["scripts/conformance.ts"]),
-  // The copied release kit's tests. The two skipped suites assert the retired macOS push matrix ("CI: macOS on pushes")
-  // and re-run the whole file under a nested environment ("the kit tests, whatever"); the one-job CI replaces both.
-  // Every other suite runs, including the drift and Jelly kit suites this file imports.
-  kit: () =>
-    run("node", ["--test", "--test-skip-pattern", "^CI: macOS on pushes|^the kit tests, whatever", "scripts/release-kit.test.mjs"], {
-      env: { KIT_TESTS_NESTED: "1" },
-    }),
+  // The copied release kit's tests, including the drift and legacy-declaration suites this file imports.
+  kit: () => run("node", ["--test", "scripts/release-kit.test.mjs"]),
   build: () => run("node", ["scripts/build.mjs"]),
   icons: () => run("node", ["scripts/check-icons.mjs"]),
   host: host,
@@ -82,13 +77,13 @@ function host() {
 
 /**
  * The workflows are parsed as workflows, not as YAML: `actionlint` catches a `${{ }}` that only exists in some
- * contexts, which makes GitHub reject the whole file and run nothing. CI runs it in its own job; here it runs when the
- * tool is on PATH.
+ * contexts, which makes GitHub reject the whole file and run nothing. This is a local courtesy: the one ci job does not
+ * install actionlint, so here it runs only when the tool is on PATH.
  */
 function actionlint() {
   const probe = spawnSync("actionlint", ["-version"], { encoding: "utf8" })
   if (probe.error?.code === "ENOENT") {
-    console.log("actionlint is not on PATH, so the workflow check is skipped here; CI runs it in its own job.")
+    console.log("actionlint is not on PATH, so this local courtesy check is skipped; CI does not install it.")
     return 0
   }
   return run("actionlint", ["-color"])

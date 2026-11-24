@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { ENDPOINT, NAMESPACE_DESCRIPTION, OAUTH_SCOPES, REGIONS } from "../../src/constants.js"
 import elevenlabs from "../../src/index.js"
-import { conflictUrl, createElevenlabsPlugin, displayUrl, guardsSource, regionOf, registerServer, serverConfig } from "../../src/plugin.js"
+import { conflictUrl, createElevenlabsPlugin, displayUrl, regionOf, registerServer, serverConfig } from "../../src/plugin.js"
 import { SKILL_NAMES } from "../../src/skills.js"
 import type { ServerSource } from "../../src/status.js"
 import { READ_TOOLS, SPEND_TOOLS } from "../../src/elevenlabs-tools.js"
@@ -81,15 +81,6 @@ describe("the elevenlabs server", () => {
     }
   })
 
-  // the guard's predicate is about money, not ownership: a stale region entry stays guarded.
-  test("guards every ElevenLabs entry, a stale region entry included, and only another vendor's server is unguarded", () => {
-    expect(guardsSource({ type: "plugin", url: ENDPOINT })).toBe(true)
-    expect(guardsSource({ type: "adopted", url: ENDPOINT })).toBe(true)
-    expect(guardsSource({ type: "stale", url: REGIONS.eu, expected: ENDPOINT })).toBe(true)
-    expect(guardsSource({ type: "conflict", url: "https://example.com/mcp", expected: ENDPOINT })).toBe(false)
-    expect(guardsSource(undefined)).toBe(false)
-  })
-
   test("reports a server that points elsewhere as a conflict, adds no server, and shows only its origin", async () => {
     const foreign = { type: "remote" as const, url: "https://alice:hunter2@example.com/api/mcp/s/secret-path-123/mcp?token=secret" }
     const { servers, records } = await register({ elevenlabs: foreign })
@@ -124,7 +115,7 @@ describe("setup", () => {
     expect(typeof elevenlabs.setup).toBe("function")
   })
 
-  test("registers the server, the rules, three skills, both commands, the namespace and the save tool, both RPCs and both hooks", async () => {
+  test("registers the server, the rules, three skills, both commands, the namespace, the save tool and both RPCs, and no per-request hooks", async () => {
     const { ctx, mcp, agent, skill, command, tool, integration, rpc, hooks } = context({})
     const cleanup = await createElevenlabsPlugin(seam).setup(ctx)
     const { editor, servers } = mcpEditor()
@@ -162,8 +153,8 @@ describe("setup", () => {
     expect(integrations.some((entry) => entry.name === "ElevenLabs API key (optional, balance only)")).toBe(true)
     expect(integrations.some((entry) => entry.methods.includes("key"))).toBe(true)
     expect(rpc).toEqual(["elevenlabs", "elevenlabs.tools"])
-    // The tools RPC's one hook, and the spending guard's two.
-    expect(hooks).toEqual(["execute.before", "execute.after"])
+    // No per-request hooks: cost and caps live on the tools RPC and in status.
+    expect(hooks).toEqual([])
     expect(typeof cleanup).toBe("function")
     await cleanup!()
     expect(rpc).toEqual(["elevenlabs"])
@@ -250,34 +241,4 @@ describe("setup", () => {
     }
   })
 
-  test("with a cap set, a creative tool ElevenLabs gives no estimate for is refused on the model path, and a failed call stays charged", async () => {
-    const { ctx, mcp, hookFns, toolList } = context({ sessionCreditCap: 2000, dailyCreditCap: 10000 })
-    const cleanup = await createElevenlabsPlugin(seam).setup(ctx)
-    mcp.run(mcpEditor().editor)
-    const before = hookFns.get("execute.before")!
-    const after = hookFns.get("execute.after")!
-    const event = (id: string, tool: string, input: Record<string, unknown>) => ({ tool: `elevenlabs_${tool}`, input, id, sessionID: "ses_test", agent: "build", messageID: "m1" })
-    // `creative_upscale` is not in the live catalogue, so it takes no `estimate_only` and ElevenLabs will price
-    // nothing: the guard refuses it rather than letting an unpriced generation through.
-    await expect(before(event("u", "creative_upscale", {}) as never)).rejects.toMatchObject({ code: "PRICE_UNKNOWN" })
-    // Speech is estimable, so the guard asks ElevenLabs for the figure through the host's own executor. The arguments
-    // are the live schema's: the words go in `prompt`, and there is no `text`.
-    const estimates: Record<string, unknown>[] = []
-    toolList.push({
-      id: "elevenlabs_creative_generate_speech",
-      execute: async (input) => {
-        estimates.push(input as Record<string, unknown>)
-        return { output: { credits: 1_500 } }
-      },
-    })
-    const args = { prompt: "hello", voice_id: "voice_example", model_id: "model_example" }
-    await before(event("c1", "creative_generate_speech", args) as never)
-    expect(estimates).toEqual([{ ...args, estimate_only: true }])
-    await after({ ...event("c1", "creative_generate_speech", args), status: "error", result: {} } as never)
-    // The failed call stays charged — ElevenLabs renders before it fails — so the next one is over the session cap.
-    await expect(before(event("c2", "creative_generate_speech", args) as never)).rejects.toMatchObject({ code: "SPEND_CAP_REACHED" })
-    // And the second refusal came from the remembered estimate, not from a second flow in the owner's workspace.
-    expect(estimates).toHaveLength(1)
-    await cleanup!()
-  })
 })

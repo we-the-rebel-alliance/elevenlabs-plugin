@@ -32,11 +32,15 @@ const atAll = (text: string) =>
 describe("the model-facing text at access all", () => {
   const all = {
     "the Code Mode namespace": NAMESPACE_DESCRIPTION,
-    "the Jelly summary": (JSON.parse(read("package.json")) as { jelly?: { summary?: string } }).jelly?.summary ?? "",
+    "the legacy declaration's summary": (JSON.parse(read("package.json")) as { jelly?: { summary?: string } }).jelly?.summary ?? "",
     // The plugin's own tool description, which the model reads before it saves a file.
     "the save tool's description": saveDescription("~/Downloads/elevenlabs"),
     ...Object.fromEntries(readdirSync(join(ROOT, "skills")).map((name) => [`skills/${name}/SKILL.md`, read(`skills/${name}/SKILL.md`)] as const)),
   }
+
+  test("the namespace line is within the fixed-context budget", () => {
+    expect(NAMESPACE_DESCRIPTION.length).toBeLessThanOrEqual(400)
+  })
 
   test.each(Object.entries(all))("%s claims nothing the default block contradicts", (_file, text) => {
     for (const [claim, pattern] of STALE) expect({ claim, hit: pattern.exec(atAll(text))?.[0] ?? null }).toEqual({ claim, hit: null })

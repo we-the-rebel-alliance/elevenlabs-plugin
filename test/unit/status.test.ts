@@ -70,7 +70,7 @@ describe("buildStatus", () => {
     const labels = text.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2, line.indexOf(":")))
     expect(labels).toEqual(["Connection", "Account", "Access", "Region", "Spend", "Conversations", "Media", "Skills", "Tools", "Agents without default rules", "OpenCode", "Next step"])
     expect(text).toContain(`- Region: global (${ENDPOINT})`)
-    expect(text).toContain("- Spend: 1,200 credits spent in the last 24 hours of 10,000; a session is capped at 2,000")
+    expect(text).toContain("- Spend: 1,200 credits recorded from priced tools-RPC calls in the last 24 hours of 10,000; a session's priced tools-RPC calls are capped at 2,000")
     expect(text).toContain("workspace balance unknown")
     expect(text).toContain("- Conversations: full: the transcript tools run, and they carry other people's calls")
     expect(text).toContain("- Account: work")
