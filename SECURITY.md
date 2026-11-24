@@ -4,12 +4,12 @@ Unofficial; not affiliated with ElevenLabs.
 
 ## Supported versions
 
-OpenCode `>=2.2.3 <2.4.0`. Tested on 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7, 2.3.0, 2.3.1 and 2.3.2. macOS and Linux.
+OpenCode `>=2.4.1 <2.5.0`. Tested on 2.4.1. macOS and Linux.
 
 ## Reporting a vulnerability
 
 Report privately through GitHub's private vulnerability reporting on
-<https://github.com/joe-broadhead/opencode-elevenlabs>. Do not open a public issue for a security problem.
+<https://github.com/we-the-rebel-alliance/elevenlabs-plugin>. Do not open a public issue for a security problem.
 
 ## Data handling
 
@@ -105,8 +105,7 @@ Report privately through GitHub's private vulnerability reporting on
   argument, `capability`, and ElevenLabs uses it to decide which tools get built next. It is the one tool that carries
   a sentence the model composed out of the workspace. It carries no workspace data, returns no tool and adds nothing at
   run time, but under `access: "all"` it goes out without a prompt. `ask-changes` asks for it; `read-only` denies it.
-  ElevenLabs marks it read-only; this plugin declares it a change on purpose, to Jelly too, so a read-only helper is
-  never given it.
+  ElevenLabs marks it read-only; this plugin declares it a change on purpose, so a read-only helper is never given it.
 - **Use a tool ElevenLabs adds later.** The `elevenlabs_*` rule allows it, and status names it as unknown. With no
   credit cap, the default, it runs unpriced. While a cap you set is on it cannot spend unpriced: a name this release
   does not classify is refused `PRICE_UNKNOWN` before it is sent, whatever it is called — the money gate is the tool
@@ -125,5 +124,5 @@ The tools RPC, `elevenlabs.tools`, lets a script call the same tools with no mod
 script runs as the agent of the session it names, so it gets the same default: with `access: "all"` it can make every
 call above, spending credits included. To restrict a script, set `access` to `"ask-changes"` or `"read-only"`, or add a
 rule to its agent or session. A script never waits on a prompt: an ask is refused, and a saved "Always allow" approval
-does not authorize a script. [docs/scripting.md](https://github.com/joe-broadhead/opencode-elevenlabs/blob/HEAD/docs/scripting.md)
+does not authorize a script. [docs/scripting.md](https://github.com/we-the-rebel-alliance/elevenlabs-plugin/blob/master/docs/scripting.md)
 has the envelope and every refusal.

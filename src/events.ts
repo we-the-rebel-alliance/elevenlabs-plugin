@@ -65,7 +65,7 @@ import { reasonOf } from "./redact.js"
  */
 
 /** The plugin's package name, which every page names. */
-export const PACKAGE = "@joe-broadhead/opencode-elevenlabs"
+export const PACKAGE = "@we-the-rebel-alliance/elevenlabs-plugin"
 /** The source every event names, and the `source` input the descriptor gives. */
 export const SOURCE = "elevenlabs"
 /** The descriptor's id for it. */
