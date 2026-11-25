@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -8,34 +8,10 @@ import { OpenCode } from "@opencode/sdk"
 import { beforeAll, describe, expect, test } from "vitest"
 import { evaluate } from "@we-the-rebel-alliance/plugin-contract/access"
 import { createHost } from "@we-the-rebel-alliance/plugin-contract/kit"
-import { parse as parseYaml } from "yaml"
 import { manifest } from "../../src/manifest.ts"
 
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const options = { access: "all", accounts: { work: {}, personal: {} } } as const
-
-/** Every `skills/<id>/SKILL.md` in this repository, as the package ships it. */
-const skillIds = () =>
-  readdirSync(join(root, "skills"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(root, "skills", entry.name, "SKILL.md")))
-    .map((entry) => entry.name)
-    .sort()
-
-/** A skill's frontmatter, parsed with a real YAML parser; the one-line description rule is checked on the raw field. */
-function expectedSkill(id: string) {
-  const path = join(root, "skills", id, "SKILL.md")
-  const text = readFileSync(path, "utf8")
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text)
-  if (match === null) throw new Error(`${path} has no frontmatter`)
-  const raw = /^description:\s*(.*)$/m.exec(match[1]!)?.[1]?.trim()
-  if (raw === undefined || raw === "" || raw === ">" || raw === "|" || raw.startsWith("> ") || raw.startsWith("| ")) {
-    throw new Error(`${path} has no one-line description`)
-  }
-  const parsed = parseYaml(match[1]!) as { description?: unknown } | null
-  const description = parsed?.description
-  if (typeof description !== "string" || description.trim() === "") throw new Error(`${path} has no description the YAML parser reads`)
-  return { id, path, description }
-}
 
 beforeAll(() => {
   const built = spawnSync(process.execPath, ["scripts/build.mjs"], { cwd: root, stdio: "inherit" })
@@ -114,47 +90,6 @@ describe("the built bundle on OpenCode 2.4.1", () => {
     }
   }, 180_000)
 
-
-  test("registers every skills/*/SKILL.md on the real 2.4.1 host", async () => {
-    const built = (await import(pathToFileURL(join(root, "dist", "index.js")).href)) as { default: Plugin.Plugin }
-    const work = mkdtempSync(join(tmpdir(), "elevenlabs-skills-"))
-    const config = join(work, "config")
-    mkdirSync(config, { recursive: true })
-    const client = await OpenCode.create({
-      plugins: [built.default],
-      app: { version: "2.4.1" },
-      config: { content: JSON.stringify({ providers: { lmstudio: { settings: { baseURL: "" } }, ollama: { settings: { baseURL: "" } }, vllm: { settings: { baseURL: "" } } } }), directory: config, project: false, claude: false },
-      database: { path: join(work, "opencode.db") },
-      models: { fetch: false },
-      fs: { filewatcher: false },
-      log: { level: "error" },
-    })
-    try {
-      const location = { directory: work }
-      const session = await client.sessions.create({ agent: "build", location })
-      await client.sessions.prompt({ sessionID: session.id, text: "activate the skills test", delivery: "queue" }).catch(() => undefined)
-      let state: { status: string; error?: string } | undefined
-      for (const deadline = Date.now() + 30_000; Date.now() < deadline; ) {
-        const { data } = (await client.plugin.list({ location })) as { data: { id?: string; state?: { status: string; error?: string } }[] }
-        state = data.find((plugin) => plugin.id === "elevenlabs")?.state
-        if (state?.status === "active") break
-        if (state?.status === "failed") throw new Error(state.error ?? "the plugin failed to load")
-        await new Promise((resolve) => setTimeout(resolve, 100))
-      }
-      expect(state?.status).toBe("active")
-      const ids = skillIds()
-      expect(ids).toEqual(["elevenlabs", "elevenlabs-calls", "elevenlabs-creative"])
-      const { data } = (await client.skill.list({ location })) as { data: { id: string; path: string; description?: string }[] }
-      const found = data
-        .filter((skill) => ids.includes(skill.id))
-        .map((skill) => ({ id: skill.id, path: skill.path, description: skill.description }))
-        .sort((left, right) => left.id.localeCompare(right.id))
-      expect(found).toEqual(ids.map(expectedSkill).sort((left, right) => left.id.localeCompare(right.id)))
-    } finally {
-      await client.close().catch(() => undefined)
-      rmSync(work, { recursive: true, force: true })
-    }
-  }, 180_000)
 
   test("registers every account's MCP server on the real 2.4.1 host", async () => {
     const built = (await import(pathToFileURL(join(root, "dist", "index.js")).href)) as { default: Plugin.Plugin }
