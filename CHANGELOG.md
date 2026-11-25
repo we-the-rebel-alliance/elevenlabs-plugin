@@ -28,8 +28,9 @@ The first release on plugin-contract v0. The repository is `we-the-rebel-allianc
 ### Changed
 
 - **OpenCode 2.4.1 exactly.** `>=2.4.1 <2.5.0` with `2.4.1` the only tested release.
-- **The fixed-context text.** The namespace line is the audited 385-character line; the skill descriptions stay under
-  300. Nothing is pinned and there is no per-request hook.
+- **The fixed-context text.** The namespace line is 296 characters, within plugin-contract v0.0.0's 300-character cap
+  (the standard's 400 is a maximum); the skill descriptions stay under 300. Nothing is pinned and there is no per-request
+  hook.
 - **Access through the contract.** `access` is `all`, `ask-changes` or `read-only`; the `methods` classes carry the spend
   risk, and the two spending reads ask.
 

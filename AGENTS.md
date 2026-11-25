@@ -101,8 +101,9 @@ assets/                    icon.svg, icon-128.png, icon-256.png
   `delete`. `agents_query_knowledge_base_rag` and `creative_transcribe_audio` are reads with `effect: ask`.
 - The conversations source is metadata only: no caller, transcript, summary, score or feedback, and an empty `text`.
   It reads only `agents_list_conversations`, `agents_list` and `agents_get`, all free.
-- The namespace line is the manifest's `plugin.summary` (the audited 385-character line). It must stay within 400 and
-  counter the server's unpinned `npx … @latest` setup: setup runs only when the user asks.
+- The namespace line is the manifest's `plugin.summary`. plugin-contract v0.0.0 caps it at 300 characters (the
+  standard's 400 is a maximum, not a target), so it stays within 300 and counters the server's unpinned
+  `npx … @latest` setup: setup runs only when the user asks.
 - `save_media` writes only under `mediaRoot`, only `https` links on `elevenlabsusercontent.com`, and asserts
   OpenCode's `external_directory` rule before it fetches anything.
 

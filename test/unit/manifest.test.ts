@@ -44,8 +44,7 @@ describe("the capabilities manifest", () => {
   test("pins the host range and the fixed-context line", () => {
     expect(manifest.plugin.name).toBe("elevenlabs")
     expect(manifest.plugin.host).toEqual({ opencode: ">=2.4.1 <2.5.0", tested: ["2.4.1"] })
-    expect(manifest.plugin.summary.length).toBe(385)
-    expect(manifest.plugin.summary.length).toBeLessThanOrEqual(400)
+    expect(manifest.plugin.summary.length).toBeLessThanOrEqual(300)
     expect(manifest.plugin.summary).toContain("npx setup unless asked")
   })
 

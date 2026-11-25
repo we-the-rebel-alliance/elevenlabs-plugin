@@ -15,9 +15,9 @@ function descriptionOf(file: string): string {
 }
 
 describe("the fixed-context text", () => {
-  test("the namespace line is the audited 385-character line, within the 400 budget", () => {
-    expect(manifest.plugin.summary).toHaveLength(385)
-    expect(manifest.plugin.summary.length).toBeLessThanOrEqual(400)
+  test("the namespace line is within plugin-contract v0.0.0's 300-character cap", () => {
+    expect(manifest.plugin.summary.length).toBeLessThanOrEqual(300)
+    expect(manifest.plugin.summary.length).toBeGreaterThan(0)
     expect(manifest.plugin.summary).not.toMatch(/[\r\n]/)
   })
 
