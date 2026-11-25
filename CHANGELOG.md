@@ -1,28 +1,40 @@
 # Changelog
 
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows
-[Semantic Versioning](https://semver.org).
+## 0.0.0 (2026-11-25)
 
-## 0.0.0 (unreleased)
+- ElevenLabs' hosted MCP server as an OpenCode plugin: voice and chat agents, conversation review, and generated
+  speech, images and video on Flows.
+- One vendor MCP server per account alias (`elevenlabs`, `elevenlabs-<alias>`), each with its own OAuth and its own
+  `region` profile (`global`, `us`, `eu`, `in`, `sg`).
+- Four own methods through one `register` call: `status`, `probe`, `events_list` and `save_media`. `events_list` and
+  `probe` take an account; `status` and `save_media` do not.
+- The `elevenlabs.conversations` events source (`session`, metadata only, a cursor bound to plugin/source/account) and
+  the `elevenlabs.conversations.list` snapshot. The cursor is the total order `(occurred_at, external_id)`.
+- `rpc.elevenlabs.account` and `rpc.elevenlabs.status` bus nudges when an alias's sign-in state or the plugin's overall
+  state changes.
+- `save_media` downloads a generated file from a signed `elevenlabsusercontent.com` link, writes it under `mediaRoot`,
+  and answers its path, size, sha256 and duration.
+- The 245 pass-through vendor tools, classified as reads, writes, sends, deletes and one export; the billed RAG read and
+  the transcribing write ask through `effect: ask`.
+- Access through the contract's `access` module (`all`, `ask-changes`, `read-only`), generated docs, three skills and a
+  two-account conformance fixture.
+- OpenCode `>=2.4.1 <2.5.0`, tested on 2.4.1. No runtime dependencies.
 
-Phase 4a of the plugin-family rebuild: the repository is `we-the-rebel-alliance/elevenlabs-plugin`, the package is
-`@we-the-rebel-alliance/elevenlabs-plugin`, and the version restarts at `0.0.0`.
+### Removed since v0.0.9
 
-### Changed
-
-- **OpenCode 2.4.1 exactly.** The `@opencode/client`, `@opencode/plugin` and `@opencode/sdk` development dependencies
-  are `2.4.1`, the supported host range is `>=2.4.1 <2.5.0`, and `2.4.1` is the only tested release. Tested on 2.4.1.
-  The host matrix and the code paths for older releases are gone; the host harness discovers a server with
-  `server/discover`, reads results in the 2026-07-28 envelope, and runs unattended Code Mode through `automation`.
-- **A new fixed-context text.** The namespace line and the three skill descriptions are within their budgets. The
-  namespace counters the hosted server's unpinned `npx … @latest` setup: setup is not run unless the user asks.
-- **No legacy.** The pre-append-only ledger compatibility path is removed; the ledger counts only the records it writes
-  in the current append-only format. The legacy declaration guide and its paragraphs are gone, as is the legacy declaration
-  test that the pinned kit copy cannot run against the new package name. The `sources` and `jelly` keys remain for the
-  next phase.
-- **One CI job.** `ci.yml` has one job named `ci`, runs the full check on Node 24 with `contents: read`, and pins its
-  actions by commit.
-
-### Removed
-
-- The old install specs, badges and links, and every release section before `0.0.0`.
+- `/elevenlabs-status` — the contract's `status` method replaces it on the tool, Code Mode and RPC doors; a command is
+  not one of the contract's doors.
+- `/elevenlabs-doctor` — its live checks acted on the workspace; the contract surface is the four methods, and status
+  reports the plugin's state without side effects.
+- The `/elevenlabs` TUI dialog — optional presentation; the contract `status` method is the one status surface.
+- `sessionCreditCap` and `dailyCreditCap` — plugin-contract prices nothing; the method classes and `effect: ask` carry
+  the spend risk, and the old billing ledger is gone.
+- The optional balance API key and the status spend line — the contract status has no spend field; the plugin makes no
+  subscription read and holds no second credential.
+- The `conversations` option — manual permission rules are not the contract's access model; the method classes and
+  per-tool rules carry the read/spend policy, and the events source is metadata only.
+- The old-sign-in cleanup — `region` is now per alias, so there is no single region switch to clean up; credentials
+  belong to OpenCode's store.
+- The top-level `region` option — moved to `accounts.<alias>.region`, one MCP server per alias.
+- The `elevenlabs.tools` tools RPC — replaced by the contract's one `register` RPC id `elevenlabs` and its doors.
+- The old top-level vendor, source and host package keys — replaced by `capabilities`.

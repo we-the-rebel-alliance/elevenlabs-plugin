@@ -1,17 +1,25 @@
 name: ci
 
+# One job, named ci: the org ruleset requires a check with that name. It runs the whole gate, so the required check
+# covers lint, typecheck, bundle, unit, the real 2.4.1 host, the pack check, conformance, docs drift and the forbidden scan.
+#
+# It runs locally too: npm ci --ignore-scripts && npm run check
+#
+# Public repository: a pull request from a fork must never reach a self-hosted runner. The runner rule below keeps
+# every fork pull request on ubuntu-24.04, and lets this repository's own runs use the org's public runner when set.
+
 on:
-  push:
-    branches: [master]
   pull_request:
-  workflow_dispatch:
+  push:
+    branches:
+      - master
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   ci:
@@ -25,12 +33,11 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            src/constants.ts
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
+          package-manager-cache: false
+      - name: Fetch the contract over HTTPS
+        # The contract is a public repository, and npm records its GitHub dependency over ssh. A runner has no key.
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
       - run: npm ci --ignore-scripts
+      - name: The committed dist is current
+        run: npm run bundle && git diff --exit-code dist/
       - run: npm run check

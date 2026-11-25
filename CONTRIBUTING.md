@@ -8,7 +8,7 @@ cd elevenlabs-plugin
 npm ci
 ```
 
-Requires Node 24 and Bun 1.4.4.
+Node 24 is required: the conformance host and pack tests run the real OpenCode 2.4.1 host, which needs it.
 
 ## Checks
 
@@ -17,33 +17,29 @@ npm run check          # every stage, in order, stopping at the first failure
 npm run check unit     # one stage
 ```
 
-Stages: `typecheck`, `unit`, `conformance`, `kit`, `build`, `icons`, `host`, `pack`, `forbidden`, `copies`, `whitelist`,
-`actionlint`. The host and pack stages run on OpenCode 2.4.1, the one tested release; `OPENCODE_BIN_2_4_1` may point at a
-stock binary instead of the one `npm` installs.
+Stages: `lint`, `typecheck`, `bundle`, `unit`, `host`, `pack`, `kit`. The `bundle` stage rewrites the committed `dist/index.js`; commit it with any source change. CI fails when it is stale. `pack` builds and installs the tarball in a temp project;
+`kit` is `plugin-kit check` (the manifest, T0, T1, the fixture, docs and forbidden patterns). The same list is the `ci`
+job.
 
-`npm pack --dry-run` must show the file list in `scripts/check.mjs` and nothing else.
+## The manifest
 
-## ElevenLabs' tools
+`package.json` `capabilities` is the source of truth. A method, source or action is declared there first; the handlers and
+tests follow. `npx plugin-kit docs` writes the generated sections; `npm run check` fails when they drift.
 
-`src/elevenlabs-tools.ts` classifies the 245 tools the live server lists. The capture in `test/fixtures/live-tools.json`
-(with `provenance.json` beside it) is what `npm run drift` and `test/unit/live-tools.test.ts` check it against: every
-served tool declared, every declared tool served, and each read-only mark equal to ElevenLabs' `readOnlyHint` unless
-`READ_ONLY_OVERRIDES` and `test/fixtures/tool-registry.json` give the reason it is stricter. To reconcile after the live
-list changes:
+## Fixtures
 
-1. Save the raw `tools/list` response over `test/fixtures/live-tools.json` (the command is in
-   `test/fixtures/README.md`).
-2. `npm run drift` names every tool the plugin does not classify, every tool the list has lost, and every tool whose
-   annotations disagree with its class.
-3. Update `src/elevenlabs-tools.ts`, then the copied legacy `jelly.tools` declaration.
-4. `npm run check`.
+`fixtures/conformance.json` is recorded from the plugin's own handlers against the deterministic two-account provider in
+`test/support/`. `test/unit/fixture.test.ts` rebuilds it and fails when the committed file differs, so a handler change
+must update the fixture in the same pull request. A real recording needs two signed-in aliases; `npx plugin-kit record --account <alias>` redacts it and `--check` proves
+the committed file is clean. Never commit a real person, call or credential.
 
-## Source
+## Standards
 
-The `elevenlabs.conversations` source is metadata only (see AGENTS.md). `npm run conformance` runs the source contract's
-kit offline and writes `reports/conformance-report.json`; keep `reports/` out of git.
+The repository follows the [plugin standard](https://github.com/we-the-rebel-alliance/plugin-contract/blob/master/docs/plugin-standard.md)
+and the [contract](https://github.com/we-the-rebel-alliance/plugin-contract/blob/master/docs/contract.md). A pull request
+is reviewed against them, and `npm run check` must be green.
 
 ## Releasing
 
-Releases are out of scope for this phase. `package.json` stays `"private": true`, the version stays `0.0.0`, and no one
-pushes a tag or a `release/*` branch until the release workflow is rebuilt.
+The owner cuts a release with `npx plugin-kit release <version>` after the version and the CHANGELOG section are in the
+pull request. CI publishes the GitHub release on the tag. Do not push a tag by hand.
