@@ -21,20 +21,19 @@ const skillIds = () =>
     .map((entry) => entry.name)
     .sort()
 
-/** A skill's frontmatter, parsed with a real YAML parser; the one-line description rule is checked on the raw field. */
+/** A skill's frontmatter and body, parsed as YAML; the host must register this exact text. */
 function expectedSkill(id: string) {
   const path = join(root, "skills", id, "SKILL.md")
   const text = readFileSync(path, "utf8")
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text)
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text)
   if (match === null) throw new Error(`${path} has no frontmatter`)
-  const raw = /^description:\s*(.*)$/m.exec(match[1]!)?.[1]?.trim()
-  if (raw === undefined || raw === "" || raw === ">" || raw === "|" || raw.startsWith("> ") || raw.startsWith("| ")) {
-    throw new Error(`${path} has no one-line description`)
+  const parsed = parseYaml(match[1]!) as { name?: unknown; description?: unknown } | null
+  if (typeof parsed?.name !== "string" || parsed.name !== id) throw new Error(`${path} names "${String(parsed?.name)}", not "${id}"`)
+  if (typeof parsed.description !== "string" || parsed.description.trim() === "") throw new Error(`${path} has no description the YAML parser reads`)
+  for (const marker of [">", "|", ">-", "|-", ">+", "|+"]) {
+    if (parsed.description.trim() === marker) throw new Error(`${path} has only the block marker ${marker}`)
   }
-  const parsed = parseYaml(match[1]!) as { description?: unknown } | null
-  const description = parsed?.description
-  if (typeof description !== "string" || description.trim() === "") throw new Error(`${path} has no description the YAML parser reads`)
-  return { id, path, description }
+  return { id, name: parsed.name, path, description: parsed.description, content: match[2]!.trim() }
 }
 
 beforeAll(() => {
@@ -114,8 +113,7 @@ describe("the built bundle on OpenCode 2.4.1", () => {
     }
   }, 180_000)
 
-
-  test("registers every skills/*/SKILL.md on the real 2.4.1 host", async () => {
+  test("registers every skills/*/SKILL.md with its YAML description on the real 2.4.1 host", async () => {
     const built = (await import(pathToFileURL(join(root, "dist", "index.js")).href)) as { default: Plugin.Plugin }
     const work = mkdtempSync(join(tmpdir(), "elevenlabs-skills-"))
     const config = join(work, "config")
@@ -144,10 +142,10 @@ describe("the built bundle on OpenCode 2.4.1", () => {
       expect(state?.status).toBe("active")
       const ids = skillIds()
       expect(ids).toEqual(["elevenlabs", "elevenlabs-calls", "elevenlabs-creative"])
-      const { data } = (await client.skill.list({ location })) as { data: { id: string; path: string; description?: string }[] }
+      const { data } = (await client.skill.list({ location })) as { data: { id: string; name: string; path: string; description?: string; content?: string }[] }
       const found = data
         .filter((skill) => ids.includes(skill.id))
-        .map((skill) => ({ id: skill.id, path: skill.path, description: skill.description }))
+        .map((skill) => ({ id: skill.id, name: skill.name, path: skill.path, description: skill.description, content: skill.content }))
         .sort((left, right) => left.id.localeCompare(right.id))
       expect(found).toEqual(ids.map(expectedSkill).sort((left, right) => left.id.localeCompare(right.id)))
     } finally {

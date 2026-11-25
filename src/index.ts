@@ -41,7 +41,7 @@ export default Plugin.define({
       accountProblems: accounts.problems,
     })
     const registration = await register(ctx, manifest, handlers)
-    const skills = await registerSkills(ctx.skill)
+    const skills = await registerSkills(ctx)
 
     const watcher = watchAccounts(ctx, {
       manifest,

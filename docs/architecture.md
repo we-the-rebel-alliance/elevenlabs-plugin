@@ -15,10 +15,12 @@ reports status.
 | `src/handlers/` | One handler per own method: `status`, `probe`, `events_list`, `save_media`; `events.ts` holds the conversation logic |
 | `src/provider/elevenlabs.ts` | The vendor client: the five region endpoints, the OAuth scope pin, the owner/status reads, the MCP tool executor, the media options |
 | `src/provider/media.ts`, `src/provider/media/policy.ts` | The signed-link download, the host and size checks, and the private file write |
+| `src/skills.ts` | Reads every `skills/*/SKILL.md`, parses its YAML frontmatter and registers it |
 | `src/errors.ts` | A provider failure in the contract's `CODE: What happened. Next step: What to do.` form |
 
-`scripts/build.mjs` bundles `src/index.ts` into one self-contained `dist/index.js`. Only `@opencode/plugin` and Node
-built-ins stay external. The bundle is committed so a Git tag installs without a build step; run `npm run bundle` after
+`scripts/build.mjs` bundles `src/index.ts` into one self-contained `dist/index.js`, including the `yaml` parser (a
+devDependency) and a `createRequire` banner for its CommonJS code. Only `@opencode/plugin` and Node built-ins stay
+external. The bundle is committed so a Git tag installs without a build step; run `npm run bundle` after
 a source change and commit the result. `tsc` typechecks; vitest runs the tests.
 
 ## Setup
@@ -30,8 +32,9 @@ a source change and commit the result. `tsc` typechecks; vitest runs the tests.
    `region` chooses the endpoint; each server carries the seven-scope OAuth pin.
 4. `register(ctx, manifest, handlers)` applies the `access` rules through the contract's `access` module, registers one
    tool and one RPC method per own method, builds the bus, and returns the registration.
-5. `registerSkills(ctx.skill)` reads every `skills/*/SKILL.md` from the package root, checks its frontmatter and body,
-   and adds it through the host transform; its registration is disposed at cleanup.
+5. `registerSkills(ctx)` reads every `skills/*/SKILL.md` from the package root, parses its YAML frontmatter (block
+   scalars `>`/`|` and their chomping variants keep their real text), checks the name, description and body, and adds
+   it through the host transform; its registration is disposed at cleanup.
 6. `watchAccounts` subscribes to `integration.updated`, `mcp.status.changed`, `credential.updated` and
    `credential.switched`; a change in an alias's state emits `account`, and a change in the overall state emits `status`.
    `registration.dispose()` and the watcher's stop are the one cleanup.
