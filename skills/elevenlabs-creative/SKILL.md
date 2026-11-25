@@ -1,6 +1,6 @@
 ---
 name: elevenlabs-creative
-description: Generate, edit, price and keep speech, images and video in the user's ElevenLabs workspace, design voices and transcribe audio on a flow. Every generation is charged. Not for managing agents (elevenlabs) or the user's own recordings (use a recording-notes connector).
+description: "Generate, edit, price and keep speech, images and video in the user's ElevenLabs workspace, design voices and transcribe audio on a flow. Every generation is charged. Not for managing agents (elevenlabs) or the user's own recordings (use a recording-notes connector)."
 license: MIT
 ---
 
@@ -49,7 +49,8 @@ prices nothing: ElevenLabs' own result says what it charged.
 - **Never call a generating tool twice to "retry".** A retry starts and charges a second generation. Poll
   `creative_get_flow_run_status` with the `flow_id` until it reports `all_completed` or `has_failures`.
 - The workspace's balance at ElevenLabs is the limit. `ask-changes` asks before every generation and every other change;
-  `read-only` denies them.
+  `read-only` denies them. `creative_transcribe_audio` is a write with `effect: ask`: it asks at `all` and `ask-changes`,
+  and `read-only` denies it.
 
 ## Speech
 

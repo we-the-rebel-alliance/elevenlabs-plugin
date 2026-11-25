@@ -1,4 +1,4 @@
-// The repository check: typecheck, bundle, unit, host, pack, then plugin-kit check. CI runs this same list in one job.
+// The repository check: lint, typecheck, bundle, unit, host, pack, then plugin-kit check. CI runs this same list in one job.
 // `node scripts/check.mjs <stage>` runs one stage, so a failure can be worked on alone.
 import { spawnSync } from "node:child_process"
 import { join } from "node:path"
@@ -8,6 +8,7 @@ const root = fileURLToPath(new URL("..", import.meta.url))
 const bin = (name) => join(root, "node_modules", ".bin", process.platform === "win32" ? `${name}.cmd` : name)
 
 const STAGES = [
+  { name: "lint", command: bin("biome"), args: ["check", "."] },
   { name: "typecheck", command: bin("tsc"), args: ["--noEmit"] },
   { name: "bundle", command: process.execPath, args: ["scripts/build.mjs"] },
   { name: "unit", command: bin("vitest"), args: ["run", "test/unit"] },

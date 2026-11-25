@@ -12138,7 +12138,7 @@ function expandRoot(root) {
 }
 function safeName(name, fallback) {
   const base = path.basename(name.replaceAll("\\", "/"));
-  const cleaned = base.replace(/[\u0000-\u001f\u007f/\\]/g, "-").replace(/^\.+/, "").trim();
+  const cleaned = base.replace(/[\p{Cc}\/\\]/gu, "-").replace(/^\.+/, "").trim();
   return cleaned === "" || cleaned === "." || cleaned === ".." ? fallback : cleaned.slice(0, 180);
 }
 var contains = (root, candidate) => {
@@ -12566,7 +12566,7 @@ function serverConfig(profile) {
 }
 function ownerOf(credential) {
   const id = String(credential.id ?? "").trim();
-  const label = typeof credential.label === "string" ? credential.label.replace(/[\u0000-\u001f\u007f]+/g, " ").trim() : "";
+  const label = typeof credential.label === "string" ? credential.label.replace(new RegExp("\\p{Cc}+", "gu"), " ").trim() : "";
   return { id: `elevenlabs:credential:${encodeURIComponent(id)}`, label: label || "ElevenLabs sign-in", verified: false };
 }
 var plain5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -13054,7 +13054,7 @@ async function conversationList(provider, alias, call, now) {
   const items = [];
   for (const conversation of page.conversations) {
     if (items.length >= LIST_CAP) break;
-    const whole = titleOf(conversation).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
+    const whole = titleOf(conversation).replace(new RegExp("\\p{Cc}", "gu"), " ").replace(/\s+/g, " ").trim();
     if (whole === "" || secretKinds(whole).length > 0) continue;
     const id = conversation.id.slice(0, 128);
     if (id === "") continue;
@@ -13218,6 +13218,9 @@ function parseSkill(directory, path2, text3) {
   if (fields.get("name") !== directory) return fail2(`must be named "${directory}" in its frontmatter`);
   const description = fields.get("description")?.trim();
   if (description === void 0 || description === "") return fail2("has no description");
+  if (/^[>|](?:[+-])?(?:\s|$)/.test(description)) {
+    return fail2("has a block scalar for its description; write description: <one line>");
+  }
   const content = match[2].trim();
   if (content === "") return fail2("has no content");
   return {

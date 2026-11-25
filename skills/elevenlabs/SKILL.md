@@ -1,6 +1,6 @@
 ---
 name: elevenlabs
-description: The voice and chat agents in the user's ElevenLabs workspace: find, read, create, update, test, branch, deploy and delete agents, their knowledge base and tools. Not for generating media (elevenlabs-creative) or the user's own meeting notes (use a meeting-notes connector).
+description: "The voice and chat agents in the user's ElevenLabs workspace: find, read, create, update, test, branch, deploy and delete agents, their knowledge base and tools. Not for generating media (elevenlabs-creative) or the user's own meeting notes (use a meeting-notes connector)."
 license: MIT
 ---
 

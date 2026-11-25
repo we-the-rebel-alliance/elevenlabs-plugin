@@ -40,6 +40,10 @@ The options and their defaults, generated from `capabilities.options`.
 | `ask-changes` | run | ask first |
 | `read-only` | run | denied |
 
+The `effect: ask` override narrows the table: a read with it asks at every level, including `read-only`; a write with it
+asks at `all` and `ask-changes`, and `read-only` denies it. `agents_query_knowledge_base_rag` is read + ask;
+`creative_transcribe_audio` is write + ask.
+
 A per-tool rule in `opencode.json` or a session's own rules wins for one method. An agent that appears after the plugin
 loads does not receive the rules and is named in `status.unguardedAgents`.
 

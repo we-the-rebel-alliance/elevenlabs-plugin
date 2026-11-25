@@ -26,6 +26,10 @@ export function parseSkill(directory: string, path: string, text: string): Skill
   if (fields.get("name") !== directory) return fail(`must be named "${directory}" in its frontmatter`)
   const description = fields.get("description")?.trim()
   if (description === undefined || description === "") return fail("has no description")
+  // The one-line rule: a block scalar (`>`, `|`, `>-`, `|+`, or their indented forms) is not read by this parser.
+  if (/^[>|](?:[+-])?(?:\s|$)/.test(description)) {
+    return fail("has a block scalar for its description; write description: <one line>")
+  }
   const content = match[2]!.trim()
   if (content === "") return fail("has no content")
   return {

@@ -39,10 +39,12 @@ to a conversation.
 
 ## Permissions and spend
 
-`access` is the ceiling the plugin installs into every agent. `all` runs every method; `ask-changes` asks for every
-`write`, `send`, `delete` and `export`, and for the two spending reads with `effect: ask`; `read-only` denies all of
-them. A per-tool rule still wins. The plugin prices nothing and sets no cap: the workspace's balance at ElevenLabs is
-the limit, and the `send` class is what names a call that reaches people.
+`access` is the ceiling the plugin installs into every agent. `all` runs every method unless its `effect` is `ask`;
+`ask-changes` asks for every change and for a read with `effect: ask`; `read-only` denies every change, while a read
+with `effect: ask` asks rather than runs. A per-tool rule still wins. The plugin prices nothing and sets no cap: the
+workspace's balance at ElevenLabs is the limit, and the `send` class is what names a call that reaches people. The
+billed RAG read (`agents_query_knowledge_base_rag`) asks at every level; the transcribing write
+(`creative_transcribe_audio`) asks at `all` and `ask-changes` and is denied at `read-only`.
 
 The 245 pass-through tools are classified in `capabilities.methods`: `agents_delete*` and `creative_delete*` are
 `delete`, the batch and outbound call tools and `agents_publish_draft` are `send`, `agents_get_signed_url` is `export`,

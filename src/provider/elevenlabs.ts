@@ -51,7 +51,7 @@ export function serverConfig(profile: AccountProfile["profile"]) {
 /** The contract's owner for a sign-in ElevenLabs itself never names: scheme, the credential's id, `verified: false`. */
 export function ownerOf(credential: { readonly id: unknown; readonly label?: unknown }): Owner {
   const id = String(credential.id ?? "").trim()
-  const label = typeof credential.label === "string" ? credential.label.replace(/[\u0000-\u001f\u007f]+/g, " ").trim() : ""
+  const label = typeof credential.label === "string" ? credential.label.replace(/\p{Cc}+/gu, " ").trim() : ""
   return { id: `elevenlabs:credential:${encodeURIComponent(id)}`, label: label || "ElevenLabs sign-in", verified: false }
 }
 

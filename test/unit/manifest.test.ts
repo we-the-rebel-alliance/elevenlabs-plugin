@@ -17,12 +17,12 @@ describe("the capabilities manifest", () => {
       expect(item.operations).toEqual([method.slice("mcp:".length)])
       counts[item.class] = (counts[item.class] ?? 0) + 1
     }
-    expect(counts).toEqual({ read: 105, write: 117, send: 6, delete: 16, export: 1 })
+    expect(counts).toEqual({ read: 104, write: 118, send: 6, delete: 16, export: 1 })
     expect(manifest.methods["mcp:agents_delete"]?.class).toBe("delete")
     expect(manifest.methods["mcp:agents_outbound_call"]?.class).toBe("send")
     expect(manifest.methods["mcp:agents_get_signed_url"]?.class).toBe("export")
     expect(manifest.methods["mcp:agents_query_knowledge_base_rag"]).toMatchObject({ class: "read", effect: "ask" })
-    expect(manifest.methods["mcp:creative_transcribe_audio"]).toMatchObject({ class: "read", effect: "ask" })
+    expect(manifest.methods["mcp:creative_transcribe_audio"]).toMatchObject({ class: "write", effect: "ask" })
   })
 
   test("declares the own methods with their accounts", () => {

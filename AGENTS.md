@@ -28,8 +28,8 @@ pass-through tools.
 | Command | Does |
 |---|---|
 | `npm ci` | installs dev tooling only; there are no runtime dependencies |
-| `npm run check` | the full list: typecheck, bundle, unit, host, pack, `plugin-kit check` |
-| `npm run check <stage>` | one stage: `typecheck`, `bundle`, `unit`, `host`, `pack`, `kit` |
+| `npm run check` | the full list: lint, typecheck, bundle, unit, host, pack, `plugin-kit check` |
+| `npm run check <stage>` | one stage: `lint`, `typecheck`, `bundle`, `unit`, `host`, `pack`, `kit` |
 | `npm run bundle` | builds the committed `dist/index.js` from `src/index.ts` |
 | `npx plugin-kit docs` | regenerates the generated doc sections from the manifest |
 | `npx plugin-kit record --account <alias>` | redacts a recorded `fixtures/conformance.json`, and checks it with `--check` |
@@ -61,8 +61,9 @@ assets/                    icon.svg, icon-128.png, icon-256.png
    first, then its handler, then its tests. Never register a tool by hand: `contract.register` does it.
 2. **Every method takes the account** when it takes one: `events_list` and `probe` are `accounts: "optional"`; `status`
    and `save_media` are `none`. Resolve through the contract's `accounts` module; never assume `default`.
-3. **Classify every method truthfully.** A delete is `delete`, a send is `send`, a share is `share`. Two spending reads
-   ask through `effect: ask`. If in doubt, choose the stricter class.
+3. **Classify every method truthfully.** A delete is `delete`, a send is `send`, a share is `share`. A billed read and a
+   transcribing write ask through `effect: ask`; the vendor's `readOnlyHint` is evidence, not the last word. If in doubt,
+   choose the stricter class.
 4. **No writes of our own.** The plugin has no `plans`/`commits` and no `actions`; the vendor's pass-through writes run
    through the vendor's tools under the `methods` classes and the person's rules.
 5. **Errors** read `CODE: What happened. Next step: What to do.` Use the contract's codes only.
@@ -101,7 +102,8 @@ assets/                    icon.svg, icon-128.png, icon-256.png
 
 - The 245 pass-through rows are the hosted server's tools. `agents_outbound_call`, the batch-call tools and
   `agents_publish_draft` reach people and are `send`; `agents_get_signed_url` is the one `export`; the deletes are
-  `delete`. `agents_query_knowledge_base_rag` and `creative_transcribe_audio` are reads with `effect: ask`.
+  `delete`. `agents_query_knowledge_base_rag` is a read with `effect: ask`; `creative_transcribe_audio` is a write with
+  `effect: ask` (it creates a transcript and bills).
 - The conversations source is metadata only: no caller, transcript, summary, score or feedback, and an empty `text`.
   It reads only `agents_list_conversations`, `agents_list` and `agents_get`, all free.
 - The namespace line is the manifest's `plugin.summary`. plugin-contract v0.0.0 caps it at 300 characters (the

@@ -47,10 +47,13 @@ The consent is for seven scopes: `convai_read`, `convai_write`, `text_to_speech`
 
 ## Access
 
-`access` is `all` (the default), `ask-changes` or `read-only`. Reads run at every level. `ask-changes` asks before a
-change; `read-only` denies one. A method's class decides: `write`, `send`, `delete` and `export` are changes, and two
-spending reads — `agents_query_knowledge_base_rag` and `creative_transcribe_audio` — ask under `ask-changes` even though
-they are reads. The `methods` table below is the full classification; a per-tool rule in `opencode.json` still wins.
+`access` is `all` (the default), `ask-changes` or `read-only`. A read runs at every level unless its method sets
+`effect: ask`. A change (`write`, `send`, `delete` or `export`) runs at `all`, asks at `ask-changes` and is denied at
+`read-only`; with `effect: ask` it asks at `all` and `ask-changes` and is denied at `read-only`. The two effect-ask
+methods in this plugin are different: `agents_query_knowledge_base_rag` is a billed read, so it asks at every level
+including `read-only`; `creative_transcribe_audio` is a write (the vendor marks it not read-only: it creates a
+transcript and bills), so it asks at `all` and `ask-changes` and is denied at `read-only`. The `methods` table below is
+the full classification; a per-tool rule in `opencode.json` still wins.
 
 ## Options
 
@@ -58,6 +61,7 @@ they are reads. The `methods` table below is the full classification; a per-tool
 |---|---|---|
 | `access` | `all` | How much the plugin's methods may do: `all`, `ask-changes` or `read-only`. |
 | `accounts` | one `default` | A map of alias to profile. The profile's `region` is `global` (the default), `us`, `eu`, `in` or `sg`. |
+| `allowUntestedHost` | `false` | Start outside the tested OpenCode range; leave it off. |
 | `mediaRoot` | `~/Downloads/elevenlabs` | Where `save_media` writes; `~` is your home folder. |
 | `maxMediaBytes` | `209715200` | The largest file `save_media` writes, in bytes. |
 
@@ -308,7 +312,7 @@ they are reads. The `methods` table below is the full classification; a per-tool
 | `mcp:creative_save_designed_voice` | write | none | `creative_save_designed_voice` |
 | `mcp:creative_save_view_state` | write | none | `creative_save_view_state` |
 | `mcp:creative_show_flow_results` | read | none | `creative_show_flow_results` |
-| `mcp:creative_transcribe_audio` | read | none | `creative_transcribe_audio` |
+| `mcp:creative_transcribe_audio` | write | none | `creative_transcribe_audio` |
 | `mcp:creative_update_brand_kit` | write | none | `creative_update_brand_kit` |
 | `mcp:creative_update_brand_kit_item` | write | none | `creative_update_brand_kit_item` |
 | `mcp:creative_update_flow_nodes` | write | none | `creative_update_flow_nodes` |
@@ -371,7 +375,7 @@ Every failure reads `CODE: What happened. Next step: What to do.`
 Generations, tests and outbound calls spend the workspace's ElevenLabs credits. The plugin prices nothing: the
 `methods` classes and `effect: ask` are the spend risk, and ElevenLabs' own result states what it charged. Confirm a
 generation, a batch or an outbound call with the person before making it; `ask-changes` asks for every change,
-`read-only` denies one.
+`read-only` denies every change, while a read with `effect: ask` still asks.
 
 ## Conversations
 

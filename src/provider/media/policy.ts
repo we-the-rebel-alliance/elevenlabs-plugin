@@ -4,7 +4,7 @@
 // the target first. Node has no dirfd-relative openat, so this detects a changed directory; it is not a sandbox against
 // someone who owns the root.
 import { createHash } from "node:crypto"
-import { constants, promises as fs, readSync } from "node:fs"
+import { constants, promises as fs, readSync, type BigIntStats, type Stats } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import { ProviderError } from "../../errors.ts"
@@ -42,7 +42,7 @@ export function expandRoot(root: string): string {
 /** A file name that cannot leave the folder: no separators, no `..`, no NUL, no leading dot. */
 export function safeName(name: string, fallback: string): string {
   const base = path.basename(name.replaceAll("\\", "/"))
-  const cleaned = base.replace(/[\u0000-\u001f\u007f/\\]/g, "-").replace(/^\.+/, "").trim()
+  const cleaned = base.replace(/[\p{Cc}\/\\]/gu, "-").replace(/^\.+/, "").trim()
   return cleaned === "" || cleaned === "." || cleaned === ".." ? fallback : cleaned.slice(0, 180)
 }
 
@@ -60,7 +60,7 @@ const contains = (root: string, candidate: string) => {
 
 async function identity(directory: string, create: boolean): Promise<Identity> {
   if (create) await fs.mkdir(directory, { recursive: true, mode: 0o700 }).catch(() => undefined)
-  let stat
+  let stat: BigIntStats
   try {
     stat = await fs.lstat(directory, { bigint: true })
   } catch (error) {
@@ -82,7 +82,7 @@ async function recheck(directories: readonly Identity[]) {
 }
 
 async function targetState(target: string, overwrite: boolean) {
-  let stat
+  let stat: Stats
   try {
     stat = await fs.lstat(target)
   } catch (error) {

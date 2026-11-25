@@ -422,7 +422,7 @@ export async function conversationList(provider: Provider, alias: string, call: 
   const items: { id: string; text: string; done?: true }[] = []
   for (const conversation of page.conversations) {
     if (items.length >= LIST_CAP) break
-    const whole = titleOf(conversation).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim()
+    const whole = titleOf(conversation).replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim()
     if (whole === "" || secretKinds(whole).length > 0) continue
     const id = conversation.id.slice(0, 128)
     if (id === "") continue

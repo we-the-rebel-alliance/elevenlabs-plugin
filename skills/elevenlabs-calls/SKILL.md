@@ -1,6 +1,6 @@
 ---
 name: elevenlabs-calls
-description: What people said to the user's ElevenLabs agents: list calls, read a transcript, search calls, report outcomes, debug an agent. Transcripts are other people's personal data. Not for the user's own meeting notes (use a meeting-notes connector).
+description: "What people said to the user's ElevenLabs agents: list calls, read a transcript, search calls, report outcomes, debug an agent. Transcripts are other people's personal data. Not for the user's own meeting notes (use a meeting-notes connector)."
 license: MIT
 ---
 
@@ -49,9 +49,10 @@ work. It never carries a caller, a transcript or a summary.
 ## Cost and access
 
 A conversation's `cost` is ElevenLabs credits, and `cost_fiat` is dollars. Report credits as credits; never convert one
-to the other. At `access: "read-only"` every read still runs. At `ask-changes`, the two spending reads ask; reads that
-only return metadata do not. If a call is refused, say which rule or access level stopped it, and do not take another
-route to the same words.
+to the other. The billed RAG read `agents_query_knowledge_base_rag` has `effect: ask`, so it asks at every level,
+including `read-only`. `creative_transcribe_audio` is a write with `effect: ask`: it asks at `all` and `ask-changes`, and
+`read-only` denies it. Reads that only return metadata run. If a call is refused, say which rule or access level stopped
+it, and do not take another route to the same words.
 
 ## Not this skill
 

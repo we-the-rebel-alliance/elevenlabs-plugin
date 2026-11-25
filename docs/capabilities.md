@@ -245,7 +245,7 @@ Every method, source, action and bus event the manifest declares.
 | `mcp:creative_save_designed_voice` | write | none | `creative_save_designed_voice` |
 | `mcp:creative_save_view_state` | write | none | `creative_save_view_state` |
 | `mcp:creative_show_flow_results` | read | none | `creative_show_flow_results` |
-| `mcp:creative_transcribe_audio` | read | none | `creative_transcribe_audio` |
+| `mcp:creative_transcribe_audio` | write | none | `creative_transcribe_audio` |
 | `mcp:creative_update_brand_kit` | write | none | `creative_update_brand_kit` |
 | `mcp:creative_update_brand_kit_item` | write | none | `creative_update_brand_kit_item` |
 | `mcp:creative_update_flow_nodes` | write | none | `creative_update_flow_nodes` |
@@ -288,7 +288,7 @@ None.
 ## Pass-through methods
 
 The 245 `mcp:<tool>` rows are ElevenLabs' own hosted tools, classified from their names and descriptions: reads, writes,
-sends, deletes, one export and the two spending reads that ask. The plugin does not register or proxy them; the vendor's
+sends, deletes, one export, the billed RAG read and the transcribing write that ask. The plugin does not register or proxy them; the vendor's
 MCP server owns them, and OpenCode names them `<server>_<tool>` — `elevenlabs_agents_list` for `default`,
 `elevenlabs-work_agents_list` for the alias `work`, and so on. `agents_outbound_call`, `agents_publish_draft`,
 `agents_request_merge_proposal_review`, `agents_retry_batch_call`, `agents_submit_batch_call` and

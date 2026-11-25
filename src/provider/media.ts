@@ -174,10 +174,3 @@ export async function saveMedia(input: SaveInput, deps: SaveDeps): Promise<Saved
   const duration = await durationOf(written.path).catch(() => undefined)
   return { ...written, mime, ...(duration === undefined ? {} : { durationSeconds: duration }) }
 }
-
-/** The line the agent reads: where the file is, how big, and what it is. */
-export function savedText(saved: Saved) {
-  const size = saved.bytes < 1024 ? `${saved.bytes} bytes` : saved.bytes < 1024 * 1024 ? `${Math.round(saved.bytes / 102.4) / 10} KB` : `${Math.round(saved.bytes / 104857.6) / 10} MB`
-  const duration = saved.durationSeconds === undefined ? "" : `, ${saved.durationSeconds} s`
-  return `Saved ${saved.mime} to ${saved.path} (${size}${duration}).`
-}

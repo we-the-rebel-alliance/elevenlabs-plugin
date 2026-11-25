@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import type { Plugin } from "@opencode/plugin"
+import { Plugin } from "@opencode/plugin"
 import { OpenCode } from "@opencode/sdk"
 import { beforeAll, describe, expect, test } from "vitest"
 import { evaluate } from "@we-the-rebel-alliance/plugin-contract/access"
 import { createHost } from "@we-the-rebel-alliance/plugin-contract/kit"
+import { parse as parseYaml } from "yaml"
 import { manifest } from "../../src/manifest.ts"
 
 const root = fileURLToPath(new URL("../..", import.meta.url))
@@ -19,6 +20,22 @@ const skillIds = () =>
     .filter((entry) => entry.isDirectory() && existsSync(join(root, "skills", entry.name, "SKILL.md")))
     .map((entry) => entry.name)
     .sort()
+
+/** A skill's frontmatter, parsed with a real YAML parser; the one-line description rule is checked on the raw field. */
+function expectedSkill(id: string) {
+  const path = join(root, "skills", id, "SKILL.md")
+  const text = readFileSync(path, "utf8")
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text)
+  if (match === null) throw new Error(`${path} has no frontmatter`)
+  const raw = /^description:\s*(.*)$/m.exec(match[1]!)?.[1]?.trim()
+  if (raw === undefined || raw === "" || raw === ">" || raw === "|" || raw.startsWith("> ") || raw.startsWith("| ")) {
+    throw new Error(`${path} has no one-line description`)
+  }
+  const parsed = parseYaml(match[1]!) as { description?: unknown } | null
+  const description = parsed?.description
+  if (typeof description !== "string" || description.trim() === "") throw new Error(`${path} has no description the YAML parser reads`)
+  return { id, path, description }
+}
 
 beforeAll(() => {
   const built = spawnSync(process.execPath, ["scripts/build.mjs"], { cwd: root, stdio: "inherit" })
@@ -57,13 +74,19 @@ describe("the built bundle on OpenCode 2.4.1", () => {
         const build = run.agents.find((agent) => agent.id === "build")
         expect(build).toBeDefined()
         const rules = build!.permissions
-        const expected = (a: "allow" | "ask" | "deny", b: "allow" | "ask" | "deny", c: "allow" | "ask" | "deny", d: "allow" | "ask" | "deny") => ({
+        const expected = (a: "allow" | "ask" | "deny", b: "allow" | "ask" | "deny", c: "allow" | "ask" | "deny", d: "allow" | "ask" | "deny", e: "allow" | "ask" | "deny") => ({
           "elevenlabs.events_list": a,
           "elevenlabs.save_media": b,
           "elevenlabs-work_agents_update": c,
           "elevenlabs-work_agents_query_knowledge_base_rag": d,
+          "elevenlabs-work_creative_transcribe_audio": e,
         })
-        const want = level === "all" ? expected("allow", "allow", "allow", "ask") : level === "ask-changes" ? expected("allow", "ask", "ask", "ask") : expected("allow", "deny", "deny", "ask")
+        const want =
+          level === "all"
+            ? expected("allow", "allow", "allow", "ask", "ask")
+            : level === "ask-changes"
+              ? expected("allow", "ask", "ask", "ask", "ask")
+              : expected("allow", "deny", "deny", "ask", "deny")
         const got = Object.fromEntries(Object.keys(want).map((action) => [action, evaluate(rules, action, "*")]))
         expect(got).toEqual(want)
       } finally {
@@ -121,12 +144,55 @@ describe("the built bundle on OpenCode 2.4.1", () => {
       expect(state?.status).toBe("active")
       const ids = skillIds()
       expect(ids).toEqual(["elevenlabs", "elevenlabs-calls", "elevenlabs-creative"])
-      const { data } = (await client.skill.list({ location })) as { data: { id: string; path: string }[] }
+      const { data } = (await client.skill.list({ location })) as { data: { id: string; path: string; description?: string }[] }
       const found = data
         .filter((skill) => ids.includes(skill.id))
-        .map((skill) => ({ id: skill.id, path: skill.path }))
+        .map((skill) => ({ id: skill.id, path: skill.path, description: skill.description }))
         .sort((left, right) => left.id.localeCompare(right.id))
-      expect(found).toEqual(ids.map((id) => ({ id, path: join(root, "skills", id, "SKILL.md") })))
+      expect(found).toEqual(ids.map(expectedSkill).sort((left, right) => left.id.localeCompare(right.id)))
+    } finally {
+      await client.close().catch(() => undefined)
+      rmSync(work, { recursive: true, force: true })
+    }
+  }, 180_000)
+
+  test("registers every account's MCP server on the real 2.4.1 host", async () => {
+    const built = (await import(pathToFileURL(join(root, "dist", "index.js")).href)) as { default: Plugin.Plugin }
+    const plugin = Plugin.define({
+      id: built.default.id,
+      setup: (ctx) => built.default.setup({ ...ctx, options: { access: "all", accounts: { default: {}, work: {}, personal: {} } } }),
+    })
+    const work = mkdtempSync(join(tmpdir(), "elevenlabs-mcp-"))
+    const config = join(work, "config")
+    mkdirSync(config, { recursive: true })
+    const client = await OpenCode.create({
+      plugins: [plugin],
+      app: { version: "2.4.1" },
+      config: { content: JSON.stringify({ providers: { lmstudio: { settings: { baseURL: "" } }, ollama: { settings: { baseURL: "" } }, vllm: { settings: { baseURL: "" } } } }), directory: config, project: false, claude: false },
+      database: { path: join(work, "opencode.db") },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+      log: { level: "error" },
+    })
+    try {
+      const location = { directory: work }
+      const session = await client.sessions.create({ agent: "build", location })
+      await client.sessions.prompt({ sessionID: session.id, text: "activate the MCP test", delivery: "queue" }).catch(() => undefined)
+      let state: { status: string; error?: string } | undefined
+      for (const deadline = Date.now() + 30_000; Date.now() < deadline; ) {
+        const { data } = (await client.plugin.list({ location })) as { data: { id?: string; state?: { status: string; error?: string } }[] }
+        state = data.find((entry) => entry.id === "elevenlabs")?.state
+        if (state?.status === "active") break
+        if (state?.status === "failed") throw new Error(state.error ?? "the plugin failed to load")
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      expect(state?.status).toBe("active")
+      const { data } = (await client.mcp.list({ location })) as { data: { name: string }[] }
+      const names = data
+        .map((server) => server.name)
+        .filter((name) => name === "elevenlabs" || name.startsWith("elevenlabs-"))
+        .sort()
+      expect(names).toEqual(["elevenlabs", "elevenlabs-personal", "elevenlabs-work"])
     } finally {
       await client.close().catch(() => undefined)
       rmSync(work, { recursive: true, force: true })
