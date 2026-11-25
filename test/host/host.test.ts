@@ -10,7 +10,7 @@ const options = { access: "all", accounts: { work: {}, personal: {} } } as const
 
 beforeAll(() => {
   const built = spawnSync(process.execPath, ["scripts/build.mjs"], { cwd: root, stdio: "inherit" })
-  if (built.status !== 0) throw new Error(`the build failed (${built.status})`)
+  if (built.status !== 0) throw new Error(`the bundle failed (${built.status})`)
 })
 
 describe("the built bundle on OpenCode 2.4.1", () => {

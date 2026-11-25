@@ -1916,7 +1916,7 @@
   "scripts": {
     "check": "node scripts/check.mjs",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/build.mjs",
+    "bundle": "node scripts/build.mjs",
     "test": "vitest run test/unit",
     "test:host": "vitest run test/host",
     "test:pack": "vitest run test/pack",

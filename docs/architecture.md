@@ -18,7 +18,8 @@ reports status.
 | `src/errors.ts` | A provider failure in the contract's `CODE: What happened. Next step: What to do.` form |
 
 `scripts/build.mjs` bundles `src/index.ts` into one self-contained `dist/index.js`. Only `@opencode/plugin` and Node
-built-ins stay external. `tsc` typechecks; vitest runs the tests.
+built-ins stay external. The bundle is committed so a Git tag installs without a build step; run `npm run bundle` after
+a source change and commit the result. `tsc` typechecks; vitest runs the tests.
 
 ## Setup
 

@@ -33,7 +33,7 @@ const problems = Object.entries(result.metafile.outputs).flatMap(([file, output]
 const text = readFileSync(join(root, "dist", "index.js"), "utf8")
 if (/\bfrom\s*["']\.\.?\//.test(text) || /\bimport\s*\(\s*["']\.\.?\//.test(text)) problems.push("dist/index.js imports a sibling module")
 if (problems.length > 0) {
-  console.error(`build: the bundle is not self-contained:\n  ${problems.join("\n  ")}`)
+  console.error(`bundle: the bundle is not self-contained:\n  ${problems.join("\n  ")}`)
   process.exit(1)
 }
-console.log("build: dist/index.js is self-contained.")
+console.log("bundle: dist/index.js is self-contained.")

@@ -28,8 +28,9 @@ pass-through tools.
 | Command | Does |
 |---|---|
 | `npm ci` | installs dev tooling only; there are no runtime dependencies |
-| `npm run check` | the full list: typecheck, build, unit, host, pack, `plugin-kit check` |
-| `npm run check <stage>` | one stage: `typecheck`, `build`, `unit`, `host`, `pack`, `kit` |
+| `npm run check` | the full list: typecheck, bundle, unit, host, pack, `plugin-kit check` |
+| `npm run check <stage>` | one stage: `typecheck`, `bundle`, `unit`, `host`, `pack`, `kit` |
+| `npm run bundle` | builds the committed `dist/index.js` from `src/index.ts` |
 | `npx plugin-kit docs` | regenerates the generated doc sections from the manifest |
 | `npx plugin-kit record --account <alias>` | redacts a recorded `fixtures/conformance.json`, and checks it with `--check` |
 | `npx plugin-kit release <version>` | checks and cuts the release tag; CI publishes it |
@@ -114,7 +115,7 @@ the section. Hand-written text is plain English: short sentences, one term per c
 
 ## Forbidden
 
-- Editing `dist/` by hand, or committing it outside a release.
+- Editing `dist/` by hand. Run `npm run bundle` after a source change and commit the current `dist/index.js` with the change.
 - Adding runtime dependencies, peer dependencies or lifecycle scripts.
 - Naming any app in code, manifest or docs, except in an `x-<app>` key.
 - Copying contract code into this repository.

@@ -17,7 +17,7 @@ npm run check          # every stage, in order, stopping at the first failure
 npm run check unit     # one stage
 ```
 
-Stages: `typecheck`, `build`, `unit`, `host`, `pack`, `kit`. `pack` builds and installs the tarball in a temp project;
+Stages: `typecheck`, `bundle`, `unit`, `host`, `pack`, `kit`. The `bundle` stage rewrites the committed `dist/index.js`; commit it with any source change. CI fails when it is stale. `pack` builds and installs the tarball in a temp project;
 `kit` is `plugin-kit check` (the manifest, T0, T1, the fixture, docs and forbidden patterns). The same list is the `ci`
 job.
 
