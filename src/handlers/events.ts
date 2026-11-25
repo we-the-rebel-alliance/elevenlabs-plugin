@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { decodeBoundCursor, encodeBoundCursor, type CursorBinding } from "@we-the-rebel-alliance/plugin-contract/cursor"
 import {
   EVENT_LIMITS,
+  EVENTS_LIST_INPUT_SCHEMA,
   PAGE_SCHEMA,
   eventsListResult,
   fitPage,
@@ -78,19 +79,22 @@ export const PROBE_DESCRIPTION =
 
 const STRING = { type: "string" } as const
 
+/** The contract's events_list input, plus this plugin's one list discriminator for the snapshot source. */
+const CONTRACT_INPUT = EVENTS_LIST_INPUT_SCHEMA as {
+  readonly type: "object"
+  readonly properties: Record<string, unknown>
+  readonly additionalProperties: false
+}
+
 export const EVENTS_INPUT = {
-  type: "object",
-  additionalProperties: false,
+  ...CONTRACT_INPUT,
   properties: {
-    source: { type: "string", enum: [SOURCE], description: "The one source this plugin lists; elevenlabs." },
+    ...CONTRACT_INPUT.properties,
     list: {
       type: "string",
       enum: ["conversations"],
       description: "Read the conversations as the list snapshot instead of events; an app reads it through RPC, not an agent.",
     },
-    since: { type: "string", maxLength: 40, description: "Where to start when there is no cursor: an ISO date or an ISO date-time with Z or an offset. Default: 24 hours ago." },
-    cursor: { type: "string", minLength: 1, maxLength: EVENT_LIMITS.cursor, description: "The cursor of the previous result, to list what came after it, passed with the same account. It wins over since." },
-    limit: { type: "integer", minimum: PAGE.min, maximum: PAGE.max, description: `Most events to return, ${PAGE.min} to ${PAGE.max}; ${PAGE.default} by default.` },
   },
 } as const satisfies JsonSchema
 
@@ -382,6 +386,10 @@ export async function listEvents(provider: Provider, alias: string, call: Call, 
   const chosen = listable.slice(0, request.limit)
   const screened = screenEvents(chosen.map((conversation) => toEvent(conversation, alias)))
   const fits = screened.events.length === 0 ? 0 : fitPage(screened.events, request.limit, MAX_BYTES)
+  // A page that cannot hold even one event is the contract's TOO_LARGE; never answer an empty page as if it were read.
+  if (screened.events.length > 0 && fits === 0) {
+    throw new RegisterError(refusal("TOO_LARGE", "one conversation is larger than this source's maxBytes", "Read a shorter window, or ask for fewer conversations."))
+  }
   const page = screened.events.slice(0, fits)
   const index = new Map(chosen.map((conversation, position) => [conversation.id, position]))
   const last = fits === screened.events.length ? chosen.length - 1 : index.get(page[fits - 1]!.external_id)!

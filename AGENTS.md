@@ -82,7 +82,7 @@ assets/                    icon.svg, icon-128.png, icon-256.png
 - **Status is `statusAnswer`.** The handler passes the manifest, version, host version, account statuses, problems and
   the result of `await call.unguardedAgents()` (`{ ok, agents | error }`); it keeps no state between `register` and the
   call. `statusAnswer` turns an unreadable agent list into a problem and an empty list, never zero agents by guess.
-- **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts`; `PAGE_SCHEMA` and `PROBE_SCHEMA` from `events`.
+- **Reuse the contract schemas.** `STATUS_SCHEMA` from `accounts`; `PAGE_SCHEMA`, `PROBE_SCHEMA` and `EVENTS_LIST_INPUT_SCHEMA` from `events`.
 - **Cursors are bound.** `decodeBoundCursor` and `encodeBoundCursor` take `{ plugin, source, account }`; a foreign
   cursor is `CURSOR_INVALID`, never a silent restart.
 
