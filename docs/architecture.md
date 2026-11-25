@@ -30,7 +30,9 @@ a source change and commit the result. `tsc` typechecks; vitest runs the tests.
    `region` chooses the endpoint; each server carries the seven-scope OAuth pin.
 4. `register(ctx, manifest, handlers)` applies the `access` rules through the contract's `access` module, registers one
    tool and one RPC method per own method, builds the bus, and returns the registration.
-5. `watchAccounts` subscribes to `integration.updated`, `mcp.status.changed`, `credential.updated` and
+5. `registerSkills(ctx.skill)` reads every `skills/*/SKILL.md` from the package root, checks its frontmatter and body,
+   and adds it through the host transform; its registration is disposed at cleanup.
+6. `watchAccounts` subscribes to `integration.updated`, `mcp.status.changed`, `credential.updated` and
    `credential.switched`; a change in an alias's state emits `account`, and a change in the overall state emits `status`.
    `registration.dispose()` and the watcher's stop are the one cleanup.
 

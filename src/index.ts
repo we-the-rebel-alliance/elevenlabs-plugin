@@ -5,6 +5,7 @@ import { ProviderError } from "./errors.ts"
 import { createHandlers } from "./handlers/index.ts"
 import { manifest } from "./manifest.ts"
 import { createProvider, DEFAULT_MEDIA_BYTES, DEFAULT_MEDIA_ROOT, MEDIA_HOSTS, type MediaOptions } from "./provider/elevenlabs.ts"
+import { registerSkills } from "./skills.ts"
 
 /** The media options, checked; a bad value is the contract's `OPTIONS_INVALID`, never a quiet fallback. */
 function mediaOptions(options: Readonly<Record<string, unknown>>): MediaOptions {
@@ -40,6 +41,7 @@ export default Plugin.define({
       accountProblems: accounts.problems,
     })
     const registration = await register(ctx, manifest, handlers)
+    const skills = await registerSkills(ctx.skill)
 
     const watcher = watchAccounts(ctx, {
       manifest,
@@ -50,6 +52,7 @@ export default Plugin.define({
     })
     return async () => {
       await watcher.stop()
+      await skills.dispose().catch(() => undefined)
       await registration.dispose()
     }
   },

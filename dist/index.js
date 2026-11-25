@@ -13196,6 +13196,65 @@ function createHandlers(deps) {
   };
 }
 
+// src/skills.ts
+import { readFile, readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Skill } from "@opencode/plugin";
+var SKILLS_DIR = fileURLToPath(new URL("../skills/", import.meta.url));
+function parseSkill(directory, path2, text3) {
+  const normalised = text3.replace(/\r\n/g, "\n");
+  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(normalised);
+  const fail2 = (problem) => {
+    throw new Error(`The "${directory}" skill was not loaded: skills/${directory}/SKILL.md ${problem}. Reinstall the plugin.`);
+  };
+  if (!match) return fail2("has no frontmatter");
+  const fields = /* @__PURE__ */ new Map();
+  for (const line of match[1].split("\n")) {
+    const at = line.indexOf(":");
+    if (at <= 0) continue;
+    fields.set(line.slice(0, at).trim(), line.slice(at + 1).trim().replace(/^(["'])(.*)\1$/, "$2"));
+  }
+  if (fields.get("name") !== directory) return fail2(`must be named "${directory}" in its frontmatter`);
+  const description = fields.get("description")?.trim();
+  if (description === void 0 || description === "") return fail2("has no description");
+  const content = match[2].trim();
+  if (content === "") return fail2("has no content");
+  return {
+    id: Skill.ID.make(directory),
+    name: Skill.Name.make(directory),
+    description,
+    path: Skill.Info.fields.path.make(path2),
+    content
+  };
+}
+async function loadSkills(directory = SKILLS_DIR) {
+  const entries = await readdir(directory, { withFileTypes: true }).catch((error2) => {
+    throw new Error(`The plugin's skills directory ${directory} could not be read (${error2 instanceof Error ? error2.message : String(error2)}). Reinstall the plugin.`);
+  });
+  const skills = [];
+  for (const entry of entries.filter((item2) => item2.isDirectory()).sort((left, right) => left.name.localeCompare(right.name))) {
+    const path2 = join(directory, entry.name, "SKILL.md");
+    let text3;
+    try {
+      text3 = await readFile(path2, "utf8");
+    } catch (error2) {
+      if (error2.code === "ENOENT") continue;
+      throw new Error(`The "${entry.name}" skill could not be read from ${path2}. Reinstall the plugin.`);
+    }
+    skills.push(parseSkill(entry.name, path2, text3));
+  }
+  if (skills.length === 0) throw new Error(`No skills were found under ${directory}. Reinstall the plugin.`);
+  return skills;
+}
+function registerSkills(skill) {
+  return loadSkills().then(
+    (skills) => skill.transform((editor) => {
+      for (const info of skills) editor.add(info);
+    })
+  );
+}
+
 // src/index.ts
 function mediaOptions(options) {
   const root = options["mediaRoot"] ?? DEFAULT_MEDIA_ROOT;
@@ -13223,6 +13282,7 @@ var index_default = Plugin.define({
       accountProblems: accounts.problems
     });
     const registration = await register(ctx, manifest, handlers);
+    const skills = await registerSkills(ctx.skill);
     const watcher = watchAccounts(ctx, {
       manifest,
       options,
@@ -13232,6 +13292,7 @@ var index_default = Plugin.define({
     });
     return async () => {
       await watcher.stop();
+      await skills.dispose().catch(() => void 0);
       await registration.dispose();
     };
   }

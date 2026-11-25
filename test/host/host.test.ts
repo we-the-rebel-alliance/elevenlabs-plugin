@@ -1,5 +1,10 @@
 import { spawnSync } from "node:child_process"
-import { fileURLToPath } from "node:url"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import type { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
 import { beforeAll, describe, expect, test } from "vitest"
 import { evaluate } from "@we-the-rebel-alliance/plugin-contract/access"
 import { createHost } from "@we-the-rebel-alliance/plugin-contract/kit"
@@ -7,6 +12,13 @@ import { manifest } from "../../src/manifest.ts"
 
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const options = { access: "all", accounts: { work: {}, personal: {} } } as const
+
+/** Every `skills/<id>/SKILL.md` in this repository, as the package ships it. */
+const skillIds = () =>
+  readdirSync(join(root, "skills"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, "skills", entry.name, "SKILL.md")))
+    .map((entry) => entry.name)
+    .sort()
 
 beforeAll(() => {
   const built = spawnSync(process.execPath, ["scripts/build.mjs"], { cwd: root, stdio: "inherit" })
@@ -76,6 +88,48 @@ describe("the built bundle on OpenCode 2.4.1", () => {
       expect(refused).toMatchObject({ ok: false, code: "PERMISSION_DENIED" })
     } finally {
       await run.close()
+    }
+  }, 180_000)
+
+
+  test("registers every skills/*/SKILL.md on the real 2.4.1 host", async () => {
+    const built = (await import(pathToFileURL(join(root, "dist", "index.js")).href)) as { default: Plugin.Plugin }
+    const work = mkdtempSync(join(tmpdir(), "elevenlabs-skills-"))
+    const config = join(work, "config")
+    mkdirSync(config, { recursive: true })
+    const client = await OpenCode.create({
+      plugins: [built.default],
+      app: { version: "2.4.1" },
+      config: { content: JSON.stringify({ providers: { lmstudio: { settings: { baseURL: "" } }, ollama: { settings: { baseURL: "" } }, vllm: { settings: { baseURL: "" } } } }), directory: config, project: false, claude: false },
+      database: { path: join(work, "opencode.db") },
+      models: { fetch: false },
+      fs: { filewatcher: false },
+      log: { level: "error" },
+    })
+    try {
+      const location = { directory: work }
+      const session = await client.sessions.create({ agent: "build", location })
+      await client.sessions.prompt({ sessionID: session.id, text: "activate the skills test", delivery: "queue" }).catch(() => undefined)
+      let state: { status: string; error?: string } | undefined
+      for (const deadline = Date.now() + 30_000; Date.now() < deadline; ) {
+        const { data } = (await client.plugin.list({ location })) as { data: { id?: string; state?: { status: string; error?: string } }[] }
+        state = data.find((plugin) => plugin.id === "elevenlabs")?.state
+        if (state?.status === "active") break
+        if (state?.status === "failed") throw new Error(state.error ?? "the plugin failed to load")
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      expect(state?.status).toBe("active")
+      const ids = skillIds()
+      expect(ids).toEqual(["elevenlabs", "elevenlabs-calls", "elevenlabs-creative"])
+      const { data } = (await client.skill.list({ location })) as { data: { id: string; path: string }[] }
+      const found = data
+        .filter((skill) => ids.includes(skill.id))
+        .map((skill) => ({ id: skill.id, path: skill.path }))
+        .sort((left, right) => left.id.localeCompare(right.id))
+      expect(found).toEqual(ids.map((id) => ({ id, path: join(root, "skills", id, "SKILL.md") })))
+    } finally {
+      await client.close().catch(() => undefined)
+      rmSync(work, { recursive: true, force: true })
     }
   }, 180_000)
 

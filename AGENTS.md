@@ -86,6 +86,8 @@ assets/                    icon.svg, icon-128.png, icon-256.png
 - **Reuse the contract schemas.** `STATUS_SCHEMA` from `accounts`; `PAGE_SCHEMA`, `PROBE_SCHEMA` and `EVENTS_LIST_INPUT_SCHEMA` from `events`.
 - **Cursors are bound.** `decodeBoundCursor` and `encodeBoundCursor` take `{ plugin, source, account }`; a foreign
   cursor is `CURSOR_INVALID`, never a silent restart.
+- **Skills load from disk.** `registerSkills(ctx.skill)` reads every `skills/*/SKILL.md` from the package root, checks
+  the name, description and body, and adds each through the host transform. Add a skill as a file; never hardcode a list.
 
 ## Adding a capability
 
