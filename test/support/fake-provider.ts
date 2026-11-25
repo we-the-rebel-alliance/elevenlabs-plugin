@@ -103,8 +103,7 @@ export function fakeCall(account: string, door: MethodCall["door"] = "rpc", bus?
     progress: async () => undefined,
     account,
     bus: emitter,
-    access: { level: "all", aliases: ["work", "personal"], rules: [], problems: [], dispose: async () => undefined },
-    unguardedAgents: async () => [],
+    unguardedAgents: async () => ({ ok: true, agents: [] }),
     door,
   }
 }

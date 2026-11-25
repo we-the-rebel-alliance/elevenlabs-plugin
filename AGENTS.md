@@ -80,8 +80,8 @@ assets/                    icon.svg, icon-128.png, icon-256.png
   and the registration has `registration.bus`. There is no flag and no second registration. Declare only what is
   emitted; a watcher outside a handler uses `registration.bus`.
 - **Status is `statusAnswer`.** The handler passes the manifest, version, host version, account statuses, problems and
-  `await call.unguardedAgents()`; it keeps no state between `register` and the call. An unreadable agent list is a
-  problem entry, never zero.
+  the result of `await call.unguardedAgents()` (`{ ok, agents | error }`); it keeps no state between `register` and the
+  call. `statusAnswer` turns an unreadable agent list into a problem and an empty list, never zero agents by guess.
 - **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts`; `PAGE_SCHEMA` and `PROBE_SCHEMA` from `events`.
 - **Cursors are bound.** `decodeBoundCursor` and `encodeBoundCursor` take `{ plugin, source, account }`; a foreign
   cursor is `CURSOR_INVALID`, never a silent restart.

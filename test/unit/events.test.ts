@@ -110,7 +110,7 @@ describe("status", () => {
 
   test("an unreadable agent list is a problem, never zero agents", async () => {
     const call = fakeCall("work")
-    const broken = { ...call, unguardedAgents: async () => Promise.reject(new Error("the agent list is unavailable")) }
+    const broken = { ...call, unguardedAgents: async () => ({ ok: false as const, error: "UNAVAILABLE: the agents could not be read. Next step: check the agent configuration." }) }
     const answer = (await handlers.status!.run({}, broken)) as { state: string; unguardedAgents: string[]; nextStep: string }
     expect(answer.state).toBe("error")
     expect(answer.unguardedAgents).toEqual([])

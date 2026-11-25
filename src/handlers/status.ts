@@ -1,7 +1,6 @@
 import { accountStatuses, accountsOf, statusAnswer, STATUS_SCHEMA } from "@we-the-rebel-alliance/plugin-contract/accounts"
 import type { Manifest } from "@we-the-rebel-alliance/plugin-contract/manifest"
 import type { MethodHandler } from "@we-the-rebel-alliance/plugin-contract/register"
-import { reasonOf } from "../errors.ts"
 import { version } from "../manifest.ts"
 import type { Provider } from "../provider/elevenlabs.ts"
 import { EMPTY_INPUT } from "./schemas.ts"
@@ -33,20 +32,13 @@ export function statusHandler(manifest: Manifest, options: Readonly<Record<strin
       for (const account of accounts) {
         if (account.state === "error") problems.push(`${account.alias}: ${account.reason ?? "the server failed"}`)
       }
-      let unguardedAgents: readonly string[] = []
-      try {
-        unguardedAgents = await call.unguardedAgents()
-      } catch (error) {
-        // An unreadable agent list is unknown, never zero: pass it as a problem and status says error.
-        problems.push(`UNAVAILABLE: the agents could not be read (${reasonOf(error)}). Next step: check the agent configuration, then read status again.`)
-      }
       return statusAnswer({
         manifest,
         version,
         hostVersion: input.hostVersion,
         accounts,
         problems,
-        unguardedAgents,
+        unguardedAgents: await call.unguardedAgents(),
       })
     },
   }

@@ -2,7 +2,6 @@ import { createHash } from "node:crypto"
 import { decodeBoundCursor, encodeBoundCursor, type CursorBinding } from "@we-the-rebel-alliance/plugin-contract/cursor"
 import {
   EVENT_LIMITS,
-  PAGE,
   PAGE_SCHEMA,
   eventsListResult,
   fitPage,
@@ -46,6 +45,8 @@ export const LIST_TOOL = "agents_list_conversations"
 export const AGENTS_TOOL = "agents_list"
 export const AGENT_TOOL = "agents_get"
 export const MAX_BYTES = 65_536
+/** The protocol's page bounds; `PAGE` itself is internal to the contract. */
+const PAGE = { default: 100, min: 1, max: 500 } as const
 
 /** A conversation still running or being processed is listed this long after its start, whatever its status. */
 export const SETTLE_MS = 2 * 3_600_000
