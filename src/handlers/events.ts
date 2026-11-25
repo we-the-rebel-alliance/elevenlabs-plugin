@@ -323,7 +323,9 @@ function toEvent(conversation: ConversationFacts, account: string): SourceEvent 
 
 /**
  * The conversations after `after`, oldest first, read from the list a page at a time. ElevenLabs sorts by start time
- * to the second, and the order within one second is not stated, so a second is used only once the list has passed it.
+ * to the second, and the order within one second is not stated, so `(t, i)` is the total order: this reads from one
+ * second before the cursor and keeps only pairs strictly after it. A second is reported only once the list has passed
+ * it, so two conversations that share a timestamp are never lost when a provider page ends between them.
  */
 async function readAfter(read: Read, after: Key, limit: number): Promise<{ readonly found: ConversationFacts[]; readonly complete: boolean }> {
   const query = { page_size: PAGE_SIZE, sort_direction: "asc", summary_mode: "exclude", call_start_after_unix: Math.max(0, Math.floor(after.t / 1000) - 1) }

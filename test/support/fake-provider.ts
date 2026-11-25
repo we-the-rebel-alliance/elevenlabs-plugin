@@ -5,7 +5,7 @@ import type { MethodCall } from "@we-the-rebel-alliance/plugin-contract/register
 import type { Provider } from "../../src/provider/elevenlabs.ts"
 
 /** One conversation as the fake list answers it. */
-interface Row {
+export interface ConversationRow {
   readonly conversation_id: string
   readonly start_time_unix_secs: number
   readonly agent_id: string
@@ -15,7 +15,7 @@ interface Row {
   readonly direction: string
 }
 
-const ROWS: Readonly<Record<string, readonly Row[]>> = {
+const ROWS: Readonly<Record<string, readonly ConversationRow[]>> = {
   work: [
     { conversation_id: "conv_work_1", start_time_unix_secs: 1_794_996_900, agent_id: "agent_checkout", agent_name: "Checkout", status: "done", call_successful: "success", direction: "inbound" },
     { conversation_id: "conv_work_2", start_time_unix_secs: 1_795_006_200, agent_id: "agent_checkout", agent_name: "Checkout", status: "failed", call_successful: "failure", direction: "outbound" },
@@ -32,14 +32,22 @@ const OWNERS: Readonly<Record<string, Owner>> = {
 /** A deterministic two-alias ElevenLabs, with no network and no host. */
 export interface FakeProvider extends Provider {
   setState(alias: string, state: AccountState): void
+  /** Replace one alias's conversations, for a test that needs its own page shape. */
+  setRows(alias: string, rows: readonly ConversationRow[]): void
   readonly calls: { readonly alias: string; readonly tool: string; readonly input: Record<string, unknown> }[]
 }
 
-export function createFakeProvider(): FakeProvider {
+/** The fake list's page cap: 100 unless a test asks the provider to page smaller. */
+export interface FakeProviderOptions {
+  readonly conversationPageSize?: number | undefined
+}
+
+export function createFakeProvider(options: FakeProviderOptions = {}): FakeProvider {
   const states = new Map<string, AccountState>([
     ["work", "ready"],
     ["personal", "ready"],
   ])
+  const rows = new Map<string, readonly ConversationRow[]>(Object.entries(ROWS))
   const calls: { alias: string; tool: string; input: Record<string, unknown> }[] = []
   const provider: FakeProvider = {
     media: { root: "/tmp/elevenlabs-test", maxBytes: 1_024 * 1_024, hosts: ["elevenlabsusercontent.com"] },
@@ -47,6 +55,9 @@ export function createFakeProvider(): FakeProvider {
     nameOf: (alias) => (alias === "default" ? "elevenlabs" : `elevenlabs-${alias}`),
     setState(alias, state) {
       states.set(alias, state)
+    },
+    setRows(alias, next) {
+      rows.set(alias, next)
     },
     async owner(alias) {
       if (states.get(alias) !== "ready") throw new Error(`no credential for ${alias}`)
@@ -62,9 +73,15 @@ export function createFakeProvider(): FakeProvider {
         if (tool === "agents_list") return { agents: [{ agent_id: "agent_checkout" }, { agent_id: "agent_support" }], has_more: false }
         if (tool === "agents_get") return { agent_id: String(input["agent_id"]), platform_settings: { privacy: { retention_days: 730 } } }
         if (tool === "agents_list_conversations") {
-          const rows = [...(ROWS[alias] ?? [])]
-          if (input["sort_direction"] === "desc") rows.reverse()
-          return { conversations: rows, has_more: false }
+          const ordered = [...(rows.get(alias) ?? [])]
+          if (input["sort_direction"] === "desc") ordered.reverse()
+          const requested = typeof input["page_size"] === "number" ? input["page_size"] : 100
+          const size = Math.max(1, Math.min(requested, options.conversationPageSize ?? requested))
+          const start = typeof input["cursor"] === "string" ? Number(input["cursor"]) : 0
+          const from = Number.isSafeInteger(start) && start >= 0 ? start : 0
+          const page = ordered.slice(from, from + size)
+          const next = from + page.length < ordered.length ? String(from + page.length) : undefined
+          return { conversations: page, ...(next === undefined ? {} : { next_cursor: next }), has_more: next !== undefined }
         }
         throw new Error(`the fake provider has no ${tool}`)
       }

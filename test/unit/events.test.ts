@@ -33,6 +33,25 @@ describe("events_list", () => {
     await expect(events.run({ source: "elevenlabs", cursor: page.cursor, account: "personal" }, fakeCall("personal"))).rejects.toMatchObject({ refusal: { code: "CURSOR_INVALID" } })
   })
 
+  test("two conversations at the same timestamp across a provider page boundary are each delivered exactly once", async () => {
+    const paged = createFakeProvider({ conversationPageSize: 1 })
+    const same = 1_794_996_900
+    paged.setRows("work", [
+      { conversation_id: "conv_same_2", start_time_unix_secs: same, agent_id: "agent_checkout", agent_name: "Checkout", status: "done", call_successful: "success", direction: "inbound" },
+      { conversation_id: "conv_same_1", start_time_unix_secs: same, agent_id: "agent_checkout", agent_name: "Checkout", status: "done", call_successful: "success", direction: "inbound" },
+    ])
+    const local = createHandlers({ manifest, options, provider: paged, hostVersion: "2.4.1", accountProblems: [], now: () => NOW })
+    const method = local.events_list!
+    const first = (await method.run({ source: "elevenlabs", since: "2026-11-18T00:00:00Z", limit: 1, account: "work" }, fakeCall("work"))) as { events: { external_id: string }[]; cursor: string; more: boolean }
+    const second = (await method.run({ source: "elevenlabs", cursor: first.cursor, limit: 1, account: "work" }, fakeCall("work"))) as { events: { external_id: string }[]; cursor: string; more: boolean }
+    const third = (await method.run({ source: "elevenlabs", cursor: second.cursor, limit: 1, account: "work" }, fakeCall("work"))) as { events: unknown[] }
+    expect(first.events.map((event) => event.external_id)).toEqual(["conv_same_1"])
+    expect(first.more).toBe(true)
+    expect(second.events.map((event) => event.external_id)).toEqual(["conv_same_2"])
+    expect(second.more).toBe(false)
+    expect(third.events).toEqual([])
+  })
+
   test("an empty second page keeps the position", async () => {
     const first = (await events.run({ source: "elevenlabs", since: "2026-11-18T00:00:00Z", account: "work" }, fakeCall("work"))) as { cursor: string }
     const second = (await events.run({ source: "elevenlabs", cursor: first.cursor, account: "work" }, fakeCall("work"))) as { events: unknown[]; more: boolean }
