@@ -18,7 +18,7 @@ The options and their defaults, generated from `capabilities.options`.
 {
   "plugins": [
     {
-      "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>",
+      "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0",
       "options": {
         "access": "ask-changes",
         "accounts": { "work": { "region": "eu" }, "personal": { "region": "global" } },

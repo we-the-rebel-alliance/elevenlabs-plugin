@@ -2,15 +2,12 @@
   "name": "@we-the-rebel-alliance/elevenlabs-plugin",
   "version": "0.0.0",
   "type": "module",
-  "description": "ElevenLabs agents, calls, and generated speech, images and video in OpenCode, through ElevenLabs' hosted MCP server.",
-  "keywords": [
-    "opencode",
-    "opencode-plugin",
-    "plugin-contract",
-    "elevenlabs"
-  ],
+  "description": "ElevenLabs voice and chat agents, conversation review, and generated speech, images and video for an OpenCode agent.",
   "license": "MIT",
-  "repository": "github:we-the-rebel-alliance/elevenlabs-plugin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/we-the-rebel-alliance/elevenlabs-plugin.git"
+  },
   "homepage": "https://github.com/we-the-rebel-alliance/elevenlabs-plugin",
   "bugs": "https://github.com/we-the-rebel-alliance/elevenlabs-plugin/issues",
   "engines": {

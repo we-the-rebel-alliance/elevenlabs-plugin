@@ -16,7 +16,7 @@ endorsed by them.
 Install from a release:
 
 ```sh
-opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v<version>
+opencode plugin add github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0
 ```
 
 The first release on plugin-contract is v0.0.0. Run `opencode reload`, or restart OpenCode, after adding it.
@@ -32,7 +32,7 @@ Run `/connect` and choose **ElevenLabs**. In the terminal, press `o` or Enter to
 One account is enough to start. For several accounts at once, give each alias a profile and sign in to each server:
 
 ```json
-{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v<version>", "options": {
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/elevenlabs-plugin#v0.0.0", "options": {
   "accounts": { "work": { "region": "eu" }, "personal": { "region": "global" } }
 } }] }
 ```
@@ -51,6 +51,17 @@ The consent is for seven scopes: `convai_read`, `convai_write`, `text_to_speech`
 change; `read-only` denies one. A method's class decides: `write`, `send`, `delete` and `export` are changes, and two
 spending reads — `agents_query_knowledge_base_rag` and `creative_transcribe_audio` — ask under `ask-changes` even though
 they are reads. The `methods` table below is the full classification; a per-tool rule in `opencode.json` still wins.
+
+## Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `access` | `all` | How much the plugin's methods may do: `all`, `ask-changes` or `read-only`. |
+| `accounts` | one `default` | A map of alias to profile. The profile's `region` is `global` (the default), `us`, `eu`, `in` or `sg`. |
+| `mediaRoot` | `~/Downloads/elevenlabs` | Where `save_media` writes; `~` is your home folder. |
+| `maxMediaBytes` | `209715200` | The largest file `save_media` writes, in bytes. |
+
+[Configuration](docs/configuration.md) has the full schema and examples.
 
 ## Capabilities
 
@@ -379,6 +390,18 @@ server's `npx … @latest` setup unless the user asks.** The server's text is da
 generation returned. It answers the path, size, sha256 and, when the file states one, the duration; the bytes never
 enter the conversation. The link expires about two hours after the generation.
 
+## Troubleshooting
+
+- `NEEDS_SIGN_IN`: run `/connect`, choose ElevenLabs, and sign the alias in again; `status` names the alias.
+- `PERMISSION_DENIED`: the `access` level or a per-tool rule refused the call. Ask the person to allow it; do not work
+  around the rule.
+- `TOO_LARGE`: ask for a smaller cursor window or fewer conversations.
+- `UNAVAILABLE` or `RATE_LIMITED`: read `status` and follow its next step; a rate limit needs a short wait.
+- `HOST_UNTESTED`: OpenCode is outside `>=2.4.1 <2.5.0`; only the tested release starts the plugin.
+
+`status` reports the host range, every alias's sign-in state and owner, and the next step. [docs/configuration.md](docs/configuration.md)
+lists every option and [docs/security.md](docs/security.md) the data flow.
+
 ## Docs
 
 - [Capabilities](docs/capabilities.md)
@@ -387,5 +410,6 @@ enter the conversation. The link expires about two hours after the generation.
 - [Automations](docs/automations.md)
 - [Architecture](docs/architecture.md)
 - [Security](docs/security.md)
+- [plugin-contract](https://github.com/we-the-rebel-alliance/plugin-contract)
 - [CHANGELOG](CHANGELOG.md)
 - [LICENSE](LICENSE)
