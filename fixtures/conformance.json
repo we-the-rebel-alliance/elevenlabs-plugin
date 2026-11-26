@@ -56,11 +56,11 @@
                 "actors": [
                   {
                     "role": "agent",
-                    "id": "elevenlabs:agent_checkout",
+                    "id": "elevenlabs:agent_1",
                     "name": "<redacted:personal>"
                   }
                 ],
-                "title": "Checkout: inbound call, done, successful",
+                "title": "<redacted:personal>: inbound call, done, successful",
                 "text": "",
                 "url": null,
                 "labels": [
@@ -68,7 +68,7 @@
                   "outcome:success",
                   "direction:inbound"
                 ],
-                "hash": "sha256:df62640962360f2bbc6aa8be6b83e811527f47ac22e2ded0a4b6f2c699682eb0"
+                "hash": "sha256:755d1e67da0387f87cb5045c9a1ffd2965d2c87faae9e5279ff8d9d84d28cb57"
               },
               {
                 "source": "elevenlabs",
@@ -80,11 +80,11 @@
                 "actors": [
                   {
                     "role": "agent",
-                    "id": "elevenlabs:agent_checkout",
+                    "id": "elevenlabs:agent_1",
                     "name": "<redacted:personal>"
                   }
                 ],
-                "title": "Checkout: outbound call, failed",
+                "title": "<redacted:personal>: outbound call, failed",
                 "text": "",
                 "url": null,
                 "labels": [
@@ -92,7 +92,7 @@
                   "outcome:failure",
                   "direction:outbound"
                 ],
-                "hash": "sha256:39366be0aaf153c2667630367af77b9c2403d1d5fe32212e36a9787f625513b6"
+                "hash": "sha256:57f51760a15cec1253a6112eb3e6d5bde5cc21de0d05f70ebbad607db2d40662"
               },
               {
                 "source": "elevenlabs",
@@ -104,11 +104,11 @@
                 "actors": [
                   {
                     "role": "agent",
-                    "id": "elevenlabs:agent_support",
+                    "id": "elevenlabs:agent_2",
                     "name": "<redacted:personal>"
                   }
                 ],
-                "title": "Support: inbound call, done, successful",
+                "title": "<redacted:personal>: inbound call, done, successful",
                 "text": "",
                 "url": null,
                 "labels": [
@@ -116,7 +116,7 @@
                   "outcome:success",
                   "direction:inbound"
                 ],
-                "hash": "sha256:80d8a0ece5e6e377c680a1b83f7b6c780a40feae45511a1f463722276abc20cf"
+                "hash": "sha256:ca9c0ba37e60098318a68eb5b4b599799308f14316b52a05c35426db03503a94"
               }
             ],
             "cursor": "eyJ2IjoyLCJzIjoiZWxldmVubGFicyIsImIiOiI3NThjZjk0MDYwMmFmY2NkIiwibyI6ImViYjE2NzIzZjhjNTJmNDAiLCJ0IjoxNzk1MDc4ODAwMDAwLCJpIjoiY29udl93b3JrXzMifQ",
@@ -177,11 +177,11 @@
                 "actors": [
                   {
                     "role": "agent",
-                    "id": "elevenlabs:agent_notes",
+                    "id": "elevenlabs:agent_3",
                     "name": "<redacted:personal>"
                   }
                 ],
-                "title": "Notes: inbound call, done, successful",
+                "title": "<redacted:personal>: inbound call, done, successful",
                 "text": "",
                 "url": null,
                 "labels": [
@@ -189,7 +189,7 @@
                   "outcome:success",
                   "direction:inbound"
                 ],
-                "hash": "sha256:bd8ba634d87485347e0e5c84bdc513d8b7f381716b73a864b1bfc16f8e4e4fc5"
+                "hash": "sha256:77eb5d17615d4bb439f8c8dbbfaafa5e6e64d0cb67b35004ff029f3145f4a09e"
               }
             ],
             "cursor": "eyJ2IjoyLCJzIjoiZWxldmVubGFicyIsImIiOiI3MDMxNzc0MTUxOWI5MDk1IiwibyI6IjFhZjBkMzk1ZGRiMjAyYjgiLCJ0IjoxNzk0OTQwNTAwMDAwLCJpIjoiY29udl9wZXJzb25hbF8xIn0",
@@ -231,16 +231,16 @@
             "items": [
               {
                 "id": "conv_work_3",
-                "text": "Support: inbound call, done, successful",
+                "text": "<redacted:personal>: inbound call, done, successful",
                 "done": true
               },
               {
                 "id": "conv_work_2",
-                "text": "Checkout: outbound call, failed"
+                "text": "<redacted:personal>: outbound call, failed"
               },
               {
                 "id": "conv_work_1",
-                "text": "Checkout: inbound call, done, successful",
+                "text": "<redacted:personal>: inbound call, done, successful",
                 "done": true
               }
             ],

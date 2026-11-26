@@ -48,6 +48,7 @@ describe("the packed release", () => {
       "dist/index.js",
       "README.md",
       "LICENSE",
+      "NOTICE",
       "assets/icon.svg",
       "assets/icon-128.png",
       "assets/icon-256.png",
@@ -57,6 +58,10 @@ describe("the packed release", () => {
     ].sort()
     expect(listed).toEqual(expected)
     expect(listed.filter((path) => path.startsWith("test/") || path.startsWith("src/") || path.startsWith("scripts/"))).toEqual([])
+    const notice = run("tar", ["-xOzf", tarball, "package/NOTICE"], work)
+    expect(notice).toContain("yaml 2.9.1 (ISC)")
+    expect(notice).toContain("Copyright Eemeli Aro")
+    expect(notice).toContain("Copyright (c) 2026 Joe Broadhead")
   })
 
   test("installs with scripts disabled and starts in the real host", async () => {

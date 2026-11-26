@@ -1,3 +1,4 @@
+import { eventHash, type SourceEvent } from "@we-the-rebel-alliance/plugin-contract/events"
 import { watchAccounts, type WatchHost } from "../../src/accounts.ts"
 import { createHandlers } from "../../src/handlers/index.ts"
 import { manifest } from "../../src/manifest.ts"
@@ -11,6 +12,33 @@ export const NOW = Date.parse("2026-11-20T12:00:00.000Z")
 export const OPTIONS = { access: "all", accounts: { work: { region: "eu" }, personal: { region: "global" } } } as const
 
 const iAm = (account: string) => fakeCall(account)
+
+/** The synthetic agent names and ids are redacted before the fixture is written, so no agent name reaches a title or id. */
+const REDACTIONS = [
+  ["the work account since the 18th", "<redacted:personal>"],
+  ["the same cursor again", "<redacted:personal>"],
+  ["the personal account since the 17th", "<redacted:personal>"],
+  ["Checkout", "<redacted:personal>"],
+  ["Support", "<redacted:personal>"],
+  ["Notes", "<redacted:personal>"],
+  ["agent_checkout", "agent_1"],
+  ["agent_support", "agent_2"],
+  ["agent_notes", "agent_3"],
+] as const
+
+/** Replace the synthetic names in every string, then repair the hash of every event whose content changed. */
+function redactSynthetic(value: unknown): unknown {
+  if (typeof value === "string") return REDACTIONS.reduce((text, [from, to]) => text.split(from).join(to), value)
+  if (Array.isArray(value)) return value.map(redactSynthetic)
+  if (typeof value !== "object" || value === null) return value
+  const result = Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactSynthetic(item)])) as Record<string, unknown>
+  if (typeof result["external_id"] === "string" && typeof result["hash"] === "string" && Array.isArray(result["actors"])) {
+    const event = { ...result }
+    delete event["hash"]
+    result["hash"] = eventHash(event as Omit<SourceEvent, "hash">)
+  }
+  return result
+}
 
 /** A host whose event stream never yields until it is stopped; `watchAccounts.check()` drives the recording. */
 function quietHost() {
@@ -55,7 +83,7 @@ export async function buildFixture() {
   await watcher.stop()
   const emitted = [...new Set(events.map((event) => event.name))]
 
-  return {
+  const fixture = {
     $comment:
       "Recorded from the plugin's own handlers against a deterministic two-account provider: two MCP aliases, the conversations events source and its list snapshot, probe and status. No real person, call or credential appears.",
     plugin: "@we-the-rebel-alliance/elevenlabs-plugin",
@@ -84,4 +112,5 @@ export async function buildFixture() {
     events: { emitted, status },
     rpc: { inputs: { save_media: { url: "https://elevenlabsusercontent.com/generated.mp3" } } },
   }
+  return redactSynthetic(fixture) as typeof fixture
 }

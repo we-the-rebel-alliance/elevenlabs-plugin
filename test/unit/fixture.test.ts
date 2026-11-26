@@ -1,23 +1,29 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { redactValue } from "@we-the-rebel-alliance/plugin-contract/kit"
 import { describe, expect, test } from "vitest"
 import { buildFixture } from "../support/fixture.ts"
 
 const root = fileURLToPath(new URL("../..", import.meta.url))
 
-/** The fixture's event hashes are repaired by `plugin-kit record`; `plugin-kit check` validates them. */
-function withoutHashes(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(withoutHashes)
-  if (typeof value !== "object" || value === null) return value
-  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "hash").map(([key, item]) => [key, withoutHashes(item)]))
+/** Every string in a JSON value, for the data-safety assertion below. */
+function strings(value: unknown): string[] {
+  if (typeof value === "string") return [value]
+  if (Array.isArray(value)) return value.flatMap(strings)
+  if (typeof value !== "object" || value === null) return []
+  return Object.values(value).flatMap(strings)
 }
 
 describe("the conformance fixture", () => {
-  test("is what the plugin's handlers answer for the two synthetic accounts, after the kit's redaction", async () => {
+  test("is exactly what the plugin's handlers answer for the two synthetic accounts", async () => {
     const recorded = JSON.parse(readFileSync(join(root, "fixtures", "conformance.json"), "utf8"))
-    expect(withoutHashes(redactValue(await buildFixture()))).toEqual(withoutHashes(recorded))
+    expect(await buildFixture()).toEqual(recorded)
+  })
+
+  test("holds no original synthetic agent name in any string", () => {
+    const recorded = JSON.parse(readFileSync(join(root, "fixtures", "conformance.json"), "utf8"))
+    const all = strings(recorded).join("\n").toLowerCase()
+    for (const name of ["checkout", "support", "notes"]) expect(all).not.toContain(name)
   })
 
   test("records both declared bus events and the two-account evidence", async () => {
