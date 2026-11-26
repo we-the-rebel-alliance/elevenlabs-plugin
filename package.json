@@ -3,6 +3,14 @@
   "version": "0.0.0",
   "type": "module",
   "description": "ElevenLabs voice and chat agents, conversation review, and generated speech, images and video for an OpenCode agent.",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "elevenlabs",
+    "voice",
+    "agents",
+    "speech"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -21,7 +29,8 @@
     "skills",
     "assets",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "capabilities": {
     "version": 1,
