@@ -50,8 +50,13 @@ async function bundledPackages(): Promise<string[]> {
     const name = packageOf(input)
     if (keep(name)) found.add(name)
   }
-  // A bundled dist can inline its own dependencies; plugin-contract's chunks carry the original module path in a
-  // comment (`// node_modules/zod/v4/...`). Those packages are redistributed by this bundle too.
+  // The contract is always inlined by the plugin, even when esbuild attributes its files to a path outside
+  // node_modules. The contract's dist also carries zod pre-bundled; detect it from the emitted code, not a metafile
+  // name, because zod's input is inside the contract's dist.
+  found.add("@we-the-rebel-alliance/plugin-contract")
+  const output = (result.outputFiles ?? []).map((file) => file.text).join("\n")
+  if (output.includes("$ZodType") || output.includes("ZodError")) found.add("zod")
+  // Other bundled dists may name their inlined dependencies in a comment (`// node_modules/<name>/...`).
   for (const input of inputs) {
     if (!input.startsWith("node_modules/")) continue
     const text = readFileSync(join(root, input), "utf8")
@@ -65,6 +70,7 @@ async function bundledPackages(): Promise<string[]> {
 describe("the bundled third-party notices", () => {
   test("every bundled package has its heading and verbatim licence text in NOTICE", async () => {
     const packages = await bundledPackages()
+    expect(packages).toContain("@we-the-rebel-alliance/plugin-contract")
     expect(packages).toContain("yaml")
     expect(packages).toContain("zod")
     const notice = readFileSync(join(root, "NOTICE"), "utf8")
