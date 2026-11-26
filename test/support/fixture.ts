@@ -61,7 +61,7 @@ export async function buildFixture() {
     plugin: "@we-the-rebel-alliance/elevenlabs-plugin",
     namespace: manifest.plugin.summary,
     accounts: {
-      real: true,
+      real: false,
       aliases: ["work", "personal"],
       required: { method: "events_list", code: "ACCOUNT_REQUIRED" },
       unknown: { method: "events_list", account: "nobodyhere", code: "ACCOUNT_UNKNOWN" },
